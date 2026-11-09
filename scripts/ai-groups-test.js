@@ -30,6 +30,8 @@ const serp = http.createServer((req, res) => { const u = new URL(req.url, 'http:
   }
   if (p.engine === 'google_flights') {
     flightSeen.push(p);
+    if (p.type === '3' && p.departure_token) return res.end(JSON.stringify({ best_flights: [{ flights: [leg('JED', 'MED', 'SV 741', 'Saudia', '2026-12-15 02:00', '2026-12-15 04:00')], total_duration: 120, price: 52000, booking_token: 'multi-booking-final' }] }));
+    if (p.type === '3') return res.end(JSON.stringify({ best_flights: [{ flights: [leg('LHE', 'JED', 'SV 739', 'Saudia', '2026-12-10 03:15', '2026-12-10 06:30')], total_duration: 215, price: 100000, departure_token: 'multi-token-1', layovers: [] }] }));
     if (p.departure_token) return res.end(JSON.stringify({ best_flights: [{ flights: [leg('JED', 'LHE', 'SV 740', 'Saudia', '2026-12-20 02:00', '2026-12-20 09:00')], total_duration: 215, price: 150000, booking_token: 'bk1' }] }));
     return res.end(JSON.stringify({ price_insights: { lowest_price: 100000, price_level: 'low', typical_price_range: [110000, 140000] }, best_flights: [{ flights: [leg('LHE', 'JED', 'SV 739', 'Saudia', '2026-12-10 03:15', '2026-12-10 06:30')], total_duration: 215, price: 100000, departure_token: 'dep-token-1', layovers: [] }], other_flights: [{ flights: [leg('LHE', 'DXB', 'EK 623', 'Emirates', '2026-12-10 04:00', '2026-12-10 06:00'), leg('DXB', 'JED', 'EK 801', 'Emirates', '2026-12-10 08:00', '2026-12-10 10:30')], layovers: [{ id: 'DXB', name: 'Dubai', duration: 120 }], total_duration: 420, price: 90000, departure_token: 'dep-token-2' }] }));
   }
@@ -158,6 +160,16 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
   const outboundParamsOk = !!outboundParams && outboundParams.return_date === returnDate && String(outboundParams.type) === '1' && String(outboundParams.adults) === '2' && outboundParams.currency === 'PKR';
   ok(outboundParamsOk, 'SerpApi receives the right round-trip parameters' + (outboundParamsOk ? '' : ' (captured flight requests: ' + JSON.stringify(flightSeen.slice(flightStart)) + ')'));
   const ret = await AG.get('/api/search/flights/return?from=LHE&to=JED&date=' + departureDate + '&ret=' + returnDate + '&token=dep-token-1'); ok(ret.s === 200 && ret.j.items[0].nos[0] === 'SV 740' && ret.j.items[0].price === 165000 && flightSeen[flightSeen.length - 1].departure_token === 'dep-token-1', 'return step sends the departure token and returns total trip fares');
+  const multiLegs = [{ from: 'LHE', to: 'JED', date: departureDate }, { from: 'JED', to: 'MED', date: iso(35) }], multiEncoded = encodeURIComponent(JSON.stringify(multiLegs));
+  const multi = await AG.get('/api/search/flights/multi?legs=' + multiEncoded + '&adults=2&cls=3');
+  const multiParams = flightSeen[flightSeen.length - 1]; let multiJson = []; try { multiJson = JSON.parse(multiParams.multi_city_json || '[]'); } catch {}
+  ok(multi.s === 200 && multi.j.multi && multi.j.items[0].token === 'multi-token-1', 'multi-city first-leg search returns real flight options and a continuation token');
+  ok(multiParams.type === '3' && multiParams.travel_class === '3' && multiJson.length === 2 && multiJson[0].departure_id === 'LHE' && multiJson[1].arrival_id === 'MED' && !('outbound_date' in multiParams) && !('return_date' in multiParams), 'SerpApi receives type=3 and a correctly encoded multi-city itinerary without one-way/return date parameters');
+  const multiNext = await AG.get('/api/search/flights/multi/next?legs=' + multiEncoded + '&token=multi-token-1&adults=2&cls=3');
+  ok(multiNext.s === 200 && multiNext.j.multi && multiNext.j.items[0].nos[0] === 'SV 741' && flightSeen[flightSeen.length - 1].departure_token === 'multi-token-1', 'multi-city next-leg search sends the selected departure token');
+  const invalidMulti = await AG.get('/api/search/flights/multi?legs=' + encodeURIComponent(JSON.stringify([{ from: 'LHE', to: 'JED', date: departureDate }]))) .then(x => x.s === 400);
+  const reversedMulti = await AG.get('/api/search/flights/multi?legs=' + encodeURIComponent(JSON.stringify([{ from: 'LHE', to: 'JED', date: iso(35) }, { from: 'JED', to: 'MED', date: departureDate }]))) .then(x => x.s === 400);
+  ok(invalidMulti && reversedMulti, 'invalid segment counts and out-of-order travel dates are rejected before calling the provider');
   ok((await AG.get('/api/search/flights?from=LHE&to=LHE&date=' + departureDate)).s === 400 && (await AG.get('/api/search/flights?from=LHE&to=JED&date=' + iso(-2))).s === 400 && (await AG.get('/api/search/flights/return?from=LHE&to=JED&date=' + departureDate)).s === 400, 'invalid flight searches are refused before any credit is used');
   const n1 = serpSeen.length; await AG.get(fq); ok(serpSeen.length === n1, 'repeat searches are served from the 10-minute cache');
   const hq = '/api/search/hotels?city=Makkah&cin=' + iso(30) + '&cout=' + iso(35) + '&adults=4&rooms=2&stars=4,5';
