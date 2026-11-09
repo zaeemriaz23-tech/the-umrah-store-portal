@@ -59,12 +59,12 @@ setInterval(() => { for (const [k, v] of bucket) if (!v.some(x => Date.now() - x
 const WD = { inflight: 0, slow: 0, aborted: 0, lastSlow: '', lagMs: 0 };
 { let last = Date.now(); setInterval(() => { const now = Date.now(); WD.lagMs = Math.max(0, now - last - 500); last = now; }, 500).unref(); }
 app.use((req, res, next) => {
-  if (/\/stream$/.test(req.path)) return next();
+  if (/\/stream$/.test(req.path)) return next(); // long-lived Server-Sent Events
   const t0 = Date.now(); WD.inflight++;
   const timer = setTimeout(() => {
     if (res.headersSent) return;
     WD.aborted++; WD.lastSlow = req.method + ' ' + req.path + ' > 25s';
-    console.error('REQUEST TIMEOUT (25s, no response yet): ' + req.method + ' ' + req.path + ' event-loop lag ' + WD.lagMs + 'ms');
+    console.error('REQUEST TIMEOUT (25s, no response yet): ' + req.method + ' ' + req.originalUrl + ' event-loop lag ' + WD.lagMs + 'ms');
     if (req.path.startsWith('/api/')) res.status(503).json({ error: 'The server is busy. Please try again.' });
     else res.status(503).set({ 'Retry-After': '5', 'Cache-Control': 'no-store' }).send(R.infoPage('Please try again', 'The server took too long to respond. Reload the page in a few seconds.', false));
   }, 25000);
@@ -386,7 +386,7 @@ app.get('/favicon.ico', (req, res) => res.set('Cache-Control', 'public, max-age=
 app.get('/api/public/inventory', (req, res) => res.set('Cache-Control', 'public, max-age=60').json(Inv.publicSnapshot()));
 app.post('/api/public/lead', (req, res) => {
   if (!limit('lead:' + req.ip, 6, 36e5)) return res.status(429).json({ error: 'Too many requests. Please call us instead.' });
-  if (req.body.website) return res.json({ ok: true });
+  if (req.body.website) return res.json({ ok: true }); // honeypot
   try { const r = Inv.publicLead(req.body || {}); save(); res.json({ ok: true, ...r }); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 /* The landing page and the CRM shell: pages are read once at start, rendered with a safe fallback, never cached by proxies (login state differs per visitor). */
