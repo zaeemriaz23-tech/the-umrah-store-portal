@@ -55,12 +55,29 @@ const bucket = new Map();
 const limit = (key, max, ms) => { const t = (bucket.get(key) || []).filter(x => Date.now() - x < ms); if (t.length >= max) return false; t.push(Date.now()); bucket.set(key, t); return true; };
 setInterval(() => { for (const [k, v] of bucket) if (!v.some(x => Date.now() - x < 36e5)) bucket.delete(k); }, 6e5).unref();
 
-app.use((req, res, next) => { if (req.method === 'GET' && !req.path.startsWith('/api/')) R.rememberHost(SEO.baseUrl(req)); next(); });
+/* ---------- request watchdog: never leave a browser hanging, and log what was slow ---------- */
+const WD = { inflight: 0, slow: 0, aborted: 0, lastSlow: '', lagMs: 0 };
+{ let last = Date.now(); setInterval(() => { const now = Date.now(); WD.lagMs = Math.max(0, now - last - 500); last = now; }, 500).unref(); }
+app.use((req, res, next) => {
+  if (/\/stream$/.test(req.path)) return next();
+  const t0 = Date.now(); WD.inflight++;
+  const timer = setTimeout(() => {
+    if (res.headersSent) return;
+    WD.aborted++; WD.lastSlow = req.method + ' ' + req.path + ' > 25s';
+    console.error('REQUEST TIMEOUT (25s, no response yet): ' + req.method + ' ' + req.path + ' event-loop lag ' + WD.lagMs + 'ms');
+    if (req.path.startsWith('/api/')) res.status(503).json({ error: 'The server is busy. Please try again.' });
+    else res.status(503).set({ 'Retry-After': '5', 'Cache-Control': 'no-store' }).send(R.infoPage('Please try again', 'The server took too long to respond. Reload the page in a few seconds.', false));
+  }, 25000);
+  let done = false; const fin = () => { if (done) return; done = true; clearTimeout(timer); WD.inflight--; const ms = Date.now() - t0; if (ms > 3000) { WD.slow++; WD.lastSlow = req.method + ' ' + req.path + ' ' + ms + 'ms'; console.warn('SLOW REQUEST ' + ms + 'ms: ' + req.method + ' ' + req.originalUrl); } };
+  res.on('finish', fin); res.on('close', fin);
+  next();
+});
+app.use((req, res, next) => { if (req.method === 'GET' && !req.path.startsWith('/api/')) { try { R.rememberHost(SEO.baseUrl(req)); } catch (e) { console.error('rememberHost failed:', e.message); } } next(); });
 app.get('/healthz', async (req, res) => {
   try {
     const storage = await D.health();
     const storageOk = !storage.configured || storage.healthy;
-    res.status(storageOk ? 200 : 503).json({ ok: true, version: require('./package.json').version, storage });
+    res.status(storageOk ? 200 : 503).json({ ok: true, version: require('./package.json').version, storage, runtime: { uptimeSec: Math.round(process.uptime()), inflight: WD.inflight, slowRequests: WD.slow, timedOut: WD.aborted, lastSlow: WD.lastSlow, eventLoopLagMs: WD.lagMs, rssMb: Math.round(process.memoryUsage().rss / 1048576) } });
   } catch (e) { res.status(503).json({ ok: false, version: require('./package.json').version, storage: { driver: 'mysql', healthy: false, error: e.message } }); }
 });
 
@@ -241,6 +258,33 @@ const hotelCheck = q => {
   if (q.cin < today()) bad('Check-in is in the past'); if (q.cout <= q.cin) bad('Check-out must be after check-in');
   if ((Date.parse(q.cout) - Date.parse(q.cin)) / 864e5 > 30) bad('Stays are limited to 30 nights per search');
 };
+const multiFlightCheck = (q, needsToken = false) => {
+  let legs; try { legs = JSON.parse(q.legs || '[]'); } catch { bad('The multi-city itinerary is invalid. Please review the flight segments.'); }
+  if (!Array.isArray(legs) || legs.length < 2 || legs.length > 6) bad('A multi-city itinerary must contain between 2 and 6 flight segments');
+  let prior = '';
+  const clean = legs.map((l, i) => {
+    const from = String(l && l.from || '').toUpperCase(), to = String(l && l.to || '').toUpperCase(), date = dayISO(l && l.date);
+    if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to)) bad('Choose valid From and To airports for Flight ' + (i + 1));
+    if (from === to) bad('From and To must be different airports on Flight ' + (i + 1));
+    if (!date || Number.isNaN(Date.parse(date + 'T00:00:00Z')) || new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) !== date) bad('Choose a valid date for Flight ' + (i + 1));
+    if (date < today()) bad('The date for Flight ' + (i + 1) + ' is in the past');
+    if (prior && date < prior) bad('Multi-city flight dates must be in chronological order');
+    prior = date; return { from, to, date };
+  });
+  q.legs = clean;
+  if (needsToken && !String(q.token || '').trim()) bad('Choose a flight before continuing to the next city');
+  if (needsToken && String(q.token).length > 4000) bad('The selected flight token is invalid. Please restart the multi-city search.');
+};
+const multiFlightRun = needsToken => async (req, res) => {
+  const q = { ...req.query };
+  try {
+    multiFlightCheck(q, needsToken);
+    const fn = needsToken ? 'multiFlightNext' : 'multiFlights';
+    res.set('Cache-Control', 'no-store').json(Search.forUser(await Search[fn](q, req.u), req.u));
+  } catch (e) { res.status(e.status || 502).json({ error: e.message }); }
+};
+app.get('/api/search/flights/multi/next', auth, searchGate('flights'), multiFlightRun(true));
+app.get('/api/search/flights/multi', auth, searchGate('flights'), multiFlightRun(false));
 app.get('/api/search/flights/return', auth, searchGate('flights'), searchRun('flights', 'flightReturn', q => { flightCheck(q); if (!q.token) bad('Choose an outbound flight first'); if (!q.ret) bad('A return date is needed'); }));
 app.get('/api/search/hotels/detail', auth, searchGate('hotels'), searchRun('hotels', 'hotelDetail', q => { hotelCheck(q); if (!q.token) bad('Choose a hotel first'); }));
 app.get('/api/search/flights', auth, searchGate('flights'), searchRun('flights', 'flights', flightCheck));
@@ -342,18 +386,22 @@ app.get('/favicon.ico', (req, res) => res.set('Cache-Control', 'public, max-age=
 app.get('/api/public/inventory', (req, res) => res.set('Cache-Control', 'public, max-age=60').json(Inv.publicSnapshot()));
 app.post('/api/public/lead', (req, res) => {
   if (!limit('lead:' + req.ip, 6, 36e5)) return res.status(429).json({ error: 'Too many requests. Please call us instead.' });
-  if (req.body.website) return res.json({ ok: true }); // honeypot
+  if (req.body.website) return res.json({ ok: true });
   try { const r = Inv.publicLead(req.body || {}); save(); res.json({ ok: true, ...r }); } catch (e) { res.status(400).json({ error: e.message }); }
 });
-let INDEX_RAW = null, PORTAL_RAW = null;
-app.get(['/', '/index.html'], (req, res) => {
-  PORTAL_RAW = PORTAL_RAW || fs.readFileSync(path.join(PUB, 'portal.html'), 'utf8');
-  html(res, SEO.portalHtml(req, PORTAL_RAW), 0);
-});
-app.get(['/app', '/app/'], (req, res) => {
-  INDEX_RAW = INDEX_RAW || fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
-  html(res, SEO.indexHtml(req, INDEX_RAW), 0);
-});
+/* The landing page and the CRM shell: pages are read once at start, rendered with a safe fallback, never cached by proxies (login state differs per visitor). */
+const readPage = f => { try { return fs.readFileSync(path.join(PUB, f), 'utf8'); } catch (e) { console.error('Cannot read public/' + f + ':', e.message); return ''; } };
+let INDEX_RAW = readPage('index.html'), PORTAL_RAW = readPage('portal.html');
+const shellPage = (render, rawName) => (req, res) => {
+  let raw = rawName === 'portal' ? PORTAL_RAW : INDEX_RAW;
+  if (!raw) { raw = readPage(rawName === 'portal' ? 'portal.html' : 'index.html'); if (rawName === 'portal') PORTAL_RAW = raw; else INDEX_RAW = raw; }
+  let out;
+  try { out = render(req, raw); } catch (e) { console.error('Page render failed, serving the plain page:', e && e.stack || e); out = raw.replace(/__BASE__/g, ''); }
+  if (!out) return res.status(503).set('Cache-Control', 'no-store').send(R.infoPage('Please try again', 'The page is not available right now.', false));
+  res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', Vary: 'Accept-Encoding' }).send(out);
+};
+app.get(['/', '/index.html'], shellPage(SEO.portalHtml, 'portal'));
+app.get(['/app', '/app/'], shellPage(SEO.indexHtml, 'app'));
 
 /* ---------- app shell ---------- */
 app.use(express.static(PUB, { index: false, maxAge: '7d', setHeaders: (res, f) => { if (/\.(js|css|html)$/.test(f) && !/vendor/.test(f)) res.set('Cache-Control', 'no-cache'); } }));
