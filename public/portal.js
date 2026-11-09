@@ -37,7 +37,7 @@ const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd
 const dLong = s => { const d = parse(s); return ord(d.getDate()) + ' ' + MON[d.getMonth()]; };
 const dSub = s => { const d = parse(s); return DAY[d.getDay()] + ', ' + d.getFullYear(); };
 const dShort = s => { const d = parse(s); return DAY[d.getDay()].slice(0, 3) + ', ' + d.getDate() + ' ' + MON[d.getMonth()].slice(0, 3); };
-const Q = { trip: 'oneway', from: { code: 'LHE', city: 'Lahore', name: 'Allama Iqbal Intl' }, to: { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }, date: addD(TODAY, 7), ret: '', ad: 1, ch: 0, inf: 0, cls: '1', direct: false, bags: 0 };
+const Q = { trip: 'oneway', from: { code: 'LHE', city: 'Lahore', name: 'Allama Iqbal Intl' }, to: { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }, date: addD(TODAY, 7), ret: '', legs: [{ from: { code: 'LHE', city: 'Lahore', name: 'Allama Iqbal Intl' }, to: { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }, date: addD(TODAY, 7) }, { from: { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }, to: { code: 'MED', city: 'Madinah', name: 'Prince Mohammad bin Abdulaziz' }, date: addD(TODAY, 10) }], ad: 1, ch: 0, inf: 0, cls: '1', direct: false, bags: 0 };
 const CABINS = [['1', 'Economy'], ['2', 'Premium Economy'], ['3', 'Business'], ['4', 'First']];
 const H = { mode: 'flights', city: 'Makkah', cin: addD(TODAY, 14), cout: addD(TODAY, 19), ad: 2, stars: '', free: false };
 const paxN = () => Q.ad + Q.ch + Q.inf;
@@ -144,24 +144,31 @@ function hotelCard() {
   <div class="ferr" id="ferr" role="alert"></div>
   <div class="srow3">${['Makkah', 'Madinah', 'Jeddah'].map(c => `<button type="button" class="chipf ${H.city === c ? 'on' : ''}" data-a="hcity" data-v="${c}">${ic('pin', 'sm')}${c}</button>`).join('')}<button type="button" class="chipf ${H.free ? 'on' : ''}" data-a="hfree">${ic('shield', 'sm')}Free cancellation</button></div></form></div>`;
 }
+function multiLegsHtml() {
+  return `<div class="multi-legs">${Q.legs.map((l, i) => `<div class="multi-leg"><div class="multi-leg-head"><b>Flight ${i + 1}</b>${Q.legs.length > 2 ? `<button type="button" class="multi-remove" data-a="removeLeg" data-v="${i}">${ic('x', 'sm')}Remove</button>` : ''}</div><div class="multi-grid">
+    <div class="f multi-air" data-a="multiAir" data-v="${i}:from" tabindex="0" role="button" aria-label="Flight ${i + 1} from airport"><span class="lab">From</span><span class="big">${l.from ? esc(l.from.city) : 'Choose airport'}</span><span class="small">${l.from ? esc(l.from.name || l.from.code) + ' · ' + esc(l.from.code) : 'Select departure airport'}</span></div>
+    <div class="f multi-air" data-a="multiAir" data-v="${i}:to" tabindex="0" role="button" aria-label="Flight ${i + 1} to airport"><span class="lab">To</span><span class="big">${l.to ? esc(l.to.city) : 'Choose airport'}</span><span class="small">${l.to ? esc(l.to.name || l.to.code) + ' · ' + esc(l.to.code) : 'Select arrival airport'}</span></div>
+    <label class="f multi-date"><span class="lab">Departure date</span><input type="date" min="${i ? (Q.legs[i - 1].date || TODAY) : TODAY}" value="${esc(l.date)}" data-a="multiDate" data-v="${i}" aria-label="Flight ${i + 1} departure date"><span class="small">${dSub(l.date)}</span></label>
+  </div></div>`).join('')}</div><div class="multi-actions"><button type="button" class="btn out" data-a="addLeg" ${Q.legs.length >= 6 ? 'disabled' : ''}>${ic('plus', 'sm')}Add another flight</button><span>2–6 flight segments</span><button class="go" type="submit" id="gobtn">${ic('search')}Search flights</button></div>`;
+}
 function searchCard(compact) {
   if (H.mode === 'hotels') return hotelCard();
-  const rt = Q.trip === 'return';
+  const rt = Q.trip === 'return', mc = Q.trip === 'multi';
+  const tripTabs = `<div class="seg" role="tablist"><button type="button" class="${Q.trip === 'oneway' ? 'on' : ''}" data-a="trip" data-v="oneway">One Way</button><button type="button" class="${rt ? 'on' : ''}" data-a="trip" data-v="return">Round Trip</button><button type="button" class="${mc ? 'on' : ''}" data-a="trip" data-v="multi">Multi-City</button></div>`;
   return `<div class="sbox" id="sbox">${tabsHtml()}<form class="scard" id="sform" novalidate>
-  <div class="srow1"><div class="seg" role="tablist"><button type="button" class="${rt ? '' : 'on'}" data-a="trip" data-v="oneway">One Way</button><button type="button" class="${rt ? 'on' : ''}" data-a="trip" data-v="return">Round Trip</button></div>
-    <div class="sopt"><div class="opt"><button type="button" data-a="paxp" aria-expanded="false" aria-label="Travellers">${ic('users')}<span id="paxlbl">${paxTxt()}</span></button></div><div class="opt"><button type="button" data-a="cabp" aria-expanded="false" aria-label="Cabin class">${ic('seat')}<span id="cablbl">${CABINS.find(c => c[0] === Q.cls)[1]}</span></button></div></div></div>
-  <div class="srow2"><div class="f fdiv" data-a="airp" data-v="from" tabindex="0" role="button" aria-label="From airport" aria-expanded="false"><span class="lab">From</span><span class="big">${esc(Q.from.city)}</span><span class="small">${esc(Q.from.name || Q.from.code)} &middot; ${esc(Q.from.code)}</span>
+  <div class="srow1">${tripTabs}<div class="sopt"><div class="opt"><button type="button" data-a="paxp" aria-expanded="false" aria-label="Travellers">${ic('users')}<span id="paxlbl">${paxTxt()}</span></button></div><div class="opt"><button type="button" data-a="cabp" aria-expanded="false" aria-label="Cabin class">${ic('seat')}<span id="cablbl">${CABINS.find(c => c[0] === Q.cls)[1]}</span></button></div></div></div>
+  ${mc ? multiLegsHtml() : `<div class="srow2"><div class="f fdiv" data-a="airp" data-v="from" tabindex="0" role="button" aria-label="From airport" aria-expanded="false"><span class="lab">From</span><span class="big">${esc(Q.from.city)}</span><span class="small">${esc(Q.from.name || Q.from.code)} &middot; ${esc(Q.from.code)}</span>
       <button type="button" class="swap" data-a="swapAp" aria-label="Swap airports">${ic('swap', 'sm')}</button></div>
-    <div class="f fdiv" data-a="airp" data-v="to" tabindex="0" role="button" aria-label="To airport" aria-expanded="false"><span class="lab">To</span>${Q.to ? `<span class="big">${esc(Q.to.city)}</span><span class="small">${esc(Q.to.name || Q.to.code)} &middot; ${esc(Q.to.code)}</span>` : '<span class="big ph">Where to?</span><span class="small">Choose an airport</span>'}</div>
+    <div class="f fdiv" data-a="airp" data-v="to" tabindex="0" role="button" aria-label="To airport" aria-expanded="false">${Q.to ? `<span class="lab">To</span><span class="big">${esc(Q.to.city)}</span><span class="small">${esc(Q.to.name || Q.to.code)} &middot; ${esc(Q.to.code)}</span>` : '<span class="lab">To</span><span class="big ph">Where to?</span><span class="small">Choose an airport</span>'}</div>
     <div class="f fdiv" data-a="calp" data-v="dep" tabindex="0" role="button" aria-label="Departure date" aria-expanded="false"><span class="lab">Departure</span><span class="big">${dLong(Q.date)}</span><span class="small">${dSub(Q.date)}</span></div>
     <div class="f ${rt ? '' : 'add'}" data-a="calp" data-v="ret" tabindex="0" role="button" aria-label="Return date" aria-expanded="false"><span class="lab">Return</span>${rt ? `<span class="big">${dLong(Q.ret)}</span><span class="small">${dSub(Q.ret)}</span>` : `<span class="big">${ic('plus', 'sm')}Return</span><span class="small">Save more on a round trip</span>`}</div>
-    <button class="go" type="submit" id="gobtn">${ic('search')}Search</button></div>
+    <button class="go" type="submit" id="gobtn">${ic('search')}Search</button></div>`}
   <div class="ferr" id="ferr" role="alert"></div>
-  <div class="srow3"><button type="button" class="chipf ${Q.to && ['JED', 'MED'].includes(Q.to.code) && rt ? 'on' : ''}" data-a="umrahFare">${ic('dome', 'sm')}Umrah Fare</button><button type="button" class="chipf ${Q.direct ? 'on' : ''}" data-a="direct">${ic('plane', 'sm')}Direct only</button>
-    <div class="adv"><button type="button" data-a="advp" aria-expanded="false">Advance Search ${ic('down', 'sm')}</button></div></div></form></div>`;
+  ${mc ? `<div class="srow3"><button type="button" class="chipf ${Q.direct ? 'on' : ''}" data-a="direct">${ic('plane', 'sm')}Direct only</button><div class="adv"><button type="button" data-a="advp" aria-expanded="false">Advance Search ${ic('down', 'sm')}</button></div></div>` : `<div class="srow3"><button type="button" class="chipf ${Q.to && ['JED', 'MED'].includes(Q.to.code) && rt ? 'on' : ''}" data-a="umrahFare">${ic('dome', 'sm')}Umrah Fare</button><button type="button" class="chipf ${Q.direct ? 'on' : ''}" data-a="direct">${ic('plane', 'sm')}Direct only</button>
+    <div class="adv"><button type="button" data-a="advp" aria-expanded="false">Advance Search ${ic('down', 'sm')}</button></div></div>`}</form></div>`;
 }
 IC.plus = '<path d="M12 5v14M5 12h14"/>'; IC.hotel = '<path d="M3 20V6a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v14M14 11h6a1 1 0 0 1 1 1v8M3 20h18M7 9h3M7 13h3M7 17h3"/>'; IC.star = '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8L12 3.5z"/>'; IC.visa = '<rect x="4" y="3" width="16" height="18" rx="2.5"/><circle cx="12" cy="10" r="3"/><path d="M8 16.5h8"/>';
-function mountSearch(host) { host.innerHTML = searchCard(); $('#sform').addEventListener('submit', e => { e.preventDefault(); H.mode === 'hotels' ? doHotelSearch() : doSearch(); }); if (H.mode === 'hotels') bindHotelForm(); $$('.f[data-a]').forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); f.click(); } })); }
+function mountSearch(host) { host.innerHTML = searchCard(); $('#sform').addEventListener('submit', e => { e.preventDefault(); H.mode === 'hotels' ? doHotelSearch() : doSearch(); }); if (H.mode === 'hotels') bindHotelForm(); $$('input[data-a=multiDate]').forEach(input => input.addEventListener('change', () => { const i = +input.dataset.v; if (Q.legs[i]) { Q.legs[i].date = input.value; const small = input.parentNode.querySelector('.small'); if (small && input.value) small.textContent = dSub(input.value); } })); $$('.f[data-a]').forEach(f => f.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); f.click(); } })); }
 const repaint = () => { const h = $('#sbox') && $('#sbox').parentNode; if (h) { closePop(); mountSearch(h); } };
 
 ACTS.mode = v => { if (H.mode === v) return; H.mode = v; if (/^#\/(flights|hotels)/.test(location.hash)) { location.hash = '#/' + (v === 'hotels' ? 'hotels' : 'flights') + '?' + (v === 'hotels' ? hqs() : qs()); return; } repaint(); };
@@ -183,7 +190,25 @@ function doHotelSearch() {
   if (H.city.length < 2) return bad('Enter a city or hotel name.'); if (H.cin < TODAY) return bad('Check-in date is in the past.'); if (H.cout <= H.cin) return bad('Check-out must be after check-in.');
   const go = () => { location.hash = '#/hotels?' + hqs(); }; if (!ME.user) return openLogin({ trip: false, hotel: true, then: go }); go();
 }
-ACTS.trip = (v, el) => { Q.trip = v; if (v === 'return' && !Q.ret) Q.ret = addD(Q.date, 7); if (v === 'oneway') Q.ret = ''; repaint(); };
+ACTS.trip = v => {
+  const previous = Q.trip;
+  if (v === 'multi' && previous !== 'multi') {
+    const from = Q.from ? { ...Q.from } : null, to = Q.to ? { ...Q.to } : null;
+    Q.legs = [
+      { from, to, date: Q.date },
+      { from: to ? { ...to } : null, to: null, date: addD(Q.date || TODAY, 3) }
+    ];
+  } else if (v !== 'multi' && previous === 'multi' && Q.legs[0]) {
+    const first = Q.legs[0];
+    if (first.from) Q.from = { ...first.from };
+    if (first.to) Q.to = { ...first.to };
+    if (first.date) Q.date = first.date;
+  }
+  Q.trip = v;
+  if (v === 'return' && !Q.ret) Q.ret = addD(Q.date, 7);
+  if (v === 'oneway') Q.ret = '';
+  repaint();
+};
 ACTS.swapAp = (a, el, e) => { e.stopPropagation(); if (!Q.to) return; [Q.from, Q.to] = [Q.to, Q.from]; repaint(); };
 ACTS.direct = () => { Q.direct = !Q.direct; repaint(); };
 ACTS.umrahFare = () => { if (!Q.to || !['JED', 'MED'].includes(Q.to.code)) Q.to = { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }; if (Q.from.code === Q.to.code) Q.from = { code: 'LHE', city: 'Lahore', name: 'Allama Iqbal Intl' }; Q.trip = 'return'; Q.ret = addD(Q.date, 14); repaint(); };
@@ -202,19 +227,33 @@ ACTS.popdone2 = () => closePop();
 
 /* airports */
 let APCACHE = {}; const apFetch = async q => { if (APCACHE[q]) return APCACHE[q]; try { return (APCACHE[q] = await api('/api/airports?q=' + encodeURIComponent(q))); } catch { return []; } };
-ACTS.airp = (which, el, e) => {
-  if (e.target.closest('.swap')) return;
-  openPop('ap-' + which, el, `<div class="inp" style="margin:4px 4px 8px;height:46px">${ic('search')}<input id="apq" placeholder="Search city or airport" autocomplete="off" aria-label="Search airports"></div><div id="apl" class="ap" role="listbox"></div>`, 'ap', async p => {
+function airportPicker(el, label, onPick) {
+  openPop('ap-' + label, el, `<div class="inp" style="margin:4px 4px 8px;height:46px">${ic('search')}<input id="apq" placeholder="Search city or airport" autocomplete="off" aria-label="Search airports"></div><div id="apl" class="ap" role="listbox"></div>`, 'ap', async p => {
     const inp = $('#apq', p), list = $('#apl', p); let items = [], hl = 0;
     const draw = () => { list.innerHTML = items.length ? items.map((a, i) => `<button type="button" role="option" class="${i === hl ? 'hl' : ''}" data-i="${i}"><span class="code">${esc(a.code)}</span><div><b>${esc(a.city)}</b><span>${esc(a.name)}, ${esc(a.country)}</span></div></button>`).join('') : '<div class="none">No airports match. Try the city name or the 3-letter code.</div>'; };
     const load = async () => { items = await apFetch(inp.value.trim()); hl = 0; draw(); };
-    const pick = i => { const a = items[i]; if (!a) return; const o = { code: a.code, city: a.city, name: a.name }; Q[which] = o; if (Q.to && Q.from.code === Q.to.code) { if (which === 'from') Q.to = null; else Q.from = { code: '', city: 'Select', name: '' }; } closePop(); repaint(); if (which === 'from' && !Q.to) setTimeout(() => { const t = $('.f[data-v=to]'); t && t.click(); }, 30); };
+    const pick = i => { const a = items[i]; if (!a) return; onPick({ code: a.code, city: a.city, name: a.name }); closePop(); };
     inp.addEventListener('input', debounce(load, 140));
     inp.addEventListener('keydown', e => { if (e.key === 'ArrowDown') { hl = Math.min(items.length - 1, hl + 1); draw(); e.preventDefault(); } else if (e.key === 'ArrowUp') { hl = Math.max(0, hl - 1); draw(); e.preventDefault(); } else if (e.key === 'Enter') { e.preventDefault(); pick(hl); } });
     list.addEventListener('click', e => { const b = e.target.closest('button[data-i]'); if (b) pick(+b.dataset.i); });
     await load(); inp.focus(); placePop();
   });
+}
+ACTS.airp = (which, el, e) => {
+  if (e.target.closest('.swap')) return;
+  airportPicker(el, which, a => { Q[which] = a; if (Q.to && Q.from.code === Q.to.code) { if (which === 'from') Q.to = null; else Q.from = { code: '', city: 'Select', name: '' }; } repaint(); if (which === 'from' && !Q.to) setTimeout(() => { const t = $('.f[data-v=to]'); t && t.click(); }, 30); });
 };
+ACTS.multiAir = (v, el) => {
+  const [idx, which] = String(v).split(':'), i = +idx, leg = Q.legs[i]; if (!leg || !['from', 'to'].includes(which)) return;
+  airportPicker(el, 'multi-' + idx + '-' + which, a => { leg[which] = a; repaint(); });
+};
+ACTS.addLeg = () => {
+  if (Q.legs.length >= 6) return;
+  const prev = Q.legs[Q.legs.length - 1];
+  Q.legs.push({ from: prev.to ? { ...prev.to } : null, to: null, date: addD(prev.date || TODAY, 3) }); repaint();
+};
+ACTS.removeLeg = v => { if (Q.legs.length <= 2) return; Q.legs.splice(+v, 1); repaint(); };
+
 
 /* calendar */
 const CAL = { view: '', mode: 'dep' };
@@ -256,7 +295,7 @@ function modal(html, wide) { closeModal(); const m = document.createElement('div
 ACTS.closeModal = closeModal;
 function openLogin(opts = {}) {
   AFTER = opts.then || null;
-  const trip = opts.trip ? `<div class="trip">${esc(Q.from.code)} ${ic('arrow', 'sm')} ${esc(Q.to ? Q.to.code : '')} <span>${esc(dShort(Q.date))}${Q.trip === 'return' && Q.ret ? ' - ' + esc(dShort(Q.ret)) : ''} &middot; ${paxTxt()}</span></div>` : '';
+  const trip = opts.trip ? (Q.trip === 'multi' ? `<div class="trip">${Q.legs.map((l, i) => `<span>${i + 1}. ${esc(l.from ? l.from.code : '?')} ${ic('arrow', 'sm')} ${esc(l.to ? l.to.code : '?')} · ${esc(l.date)}</span>`).join(' ')}<span>${paxTxt()} · ${CABINS.find(c => c[0] === Q.cls)[1]}</span></div>` : `<div class="trip">${esc(Q.from.code)} ${ic('arrow', 'sm')} ${esc(Q.to ? Q.to.code : '')} <span>${esc(dShort(Q.date))}${Q.trip === 'return' && Q.ret ? ' - ' + esc(dShort(Q.ret)) : ''} &middot; ${paxTxt()}</span></div>`) : '';
   const m = modal(`<div class="mhead"><div class="lk">${ic(opts.trip ? 'lock' : 'user', 'lg')}</div><h3>${opts.trip ? 'Sign in to see live fares' : opts.hotel ? 'Sign in to see live hotel rates' : 'Welcome back'}</h3><p>${opts.trip ? 'Fares are shown to approved travel agents only.' : opts.hotel ? 'Rates are shown to approved travel agents only.' : 'Sign in to your agent account.'}</p>${trip}</div>
   <form class="mbody" id="lform" novalidate><div class="formerr" id="lerr" role="alert"></div>
   <label class="fld"><span>Email or username</span><div class="inp">${ic('mail')}<input id="lg-u" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="you@company.com" required></div></label>
@@ -279,17 +318,45 @@ ACTS.eye = (a, el) => { const i = el.parentNode.querySelector('input'); const s 
 /* search submit */
 function doSearch() {
   const er = $('#ferr'); er.classList.remove('on'); const bad = m => { er.textContent = m; er.classList.add('on'); };
+  if (Q.trip === 'multi') {
+    if (Q.legs.length < 2 || Q.legs.length > 6) return bad('Add between 2 and 6 flight segments.');
+    for (let i = 0; i < Q.legs.length; i++) {
+      const l = Q.legs[i];
+      if (!l.from || !l.from.code || !l.to || !l.to.code) return bad('Choose the From and To airports for Flight ' + (i + 1) + '.');
+      if (l.from.code === l.to.code) return bad('Flight ' + (i + 1) + ' must use different From and To airports.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(l.date) || l.date < TODAY) return bad('Choose a valid future date for Flight ' + (i + 1) + '.');
+      if (i && l.date < Q.legs[i - 1].date) return bad('Flight dates must be in chronological order.');
+    }
+    const go = () => { location.hash = '#/flights?' + qs(); };
+    if (!ME.user) return openLogin({ trip: true, then: go }); go(); return;
+  }
   if (!Q.from.code) return bad('Choose where you are flying from.'); if (!Q.to) return bad('Choose where you are flying to.');
   if (Q.from.code === Q.to.code) return bad('From and To must be different airports.'); if (Q.date < TODAY) return bad('Departure date is in the past.');
   if (Q.trip === 'return' && (!Q.ret || Q.ret < Q.date)) return bad('Choose a return date on or after departure.');
   const go = () => { location.hash = '#/flights?' + qs(); };
   if (!ME.user) return openLogin({ trip: true, then: go }); go();
 }
-const qs = () => new URLSearchParams({ f: Q.from.code, fc: Q.from.city, fn: Q.from.name || '', t: Q.to.code, tc: Q.to.city, tn: Q.to.name || '', d: Q.date, r: Q.trip === 'return' ? Q.ret : '', a: Q.ad, c: Q.ch, i: Q.inf, k: Q.cls, x: Q.direct ? 1 : 0, b: Q.bags }).toString();
+const qs = () => {
+  const p = new URLSearchParams({ trip: Q.trip, f: Q.from.code, fc: Q.from.city, fn: Q.from.name || '', t: Q.to ? Q.to.code : '', tc: Q.to ? Q.to.city : '', tn: Q.to ? Q.to.name || '' : '', d: Q.date, r: Q.trip === 'return' ? Q.ret : '', a: Q.ad, c: Q.ch, i: Q.inf, k: Q.cls, x: Q.direct ? 1 : 0, b: Q.bags });
+  if (Q.trip === 'multi') p.set('mc', JSON.stringify(Q.legs.map(l => ({ from: l.from ? l.from.code : '', fromCity: l.from ? l.from.city : '', fromName: l.from ? l.from.name : '', to: l.to ? l.to.code : '', toCity: l.to ? l.to.city : '', toName: l.to ? l.to.name : '', date: l.date }))));
+  return p.toString();
+};
+function airportInfo(code, city, name) {
+  const known = { LHE: ['Lahore', 'Allama Iqbal Intl'], KHI: ['Karachi', 'Jinnah Intl'], ISB: ['Islamabad', 'Islamabad Intl'], PEW: ['Peshawar', 'Bacha Khan Intl'], MUX: ['Multan', 'Multan Intl'], SKT: ['Sialkot', 'Sialkot Intl'], JED: ['Jeddah', 'King Abdulaziz Intl'], MED: ['Madinah', 'Prince Mohammad bin Abdulaziz'], DXB: ['Dubai', 'Dubai Intl'], RUH: ['Riyadh', 'King Khalid Intl'] };
+  return { code, city: city || (known[code] ? known[code][0] : code), name: name || (known[code] ? known[code][1] : '') };
+}
 function readQs(s) {
-  const p = new URLSearchParams(s); if (!p.get('f') || !p.get('t') || !p.get('d')) return false;
-  Q.from = { code: p.get('f').toUpperCase(), city: p.get('fc') || p.get('f'), name: p.get('fn') || '' }; Q.to = { code: p.get('t').toUpperCase(), city: p.get('tc') || p.get('t'), name: p.get('tn') || '' };
-  Q.date = p.get('d'); Q.ret = p.get('r') || ''; Q.trip = Q.ret ? 'return' : 'oneway'; Q.ad = Math.max(1, +p.get('a') || 1); Q.ch = +p.get('c') || 0; Q.inf = +p.get('i') || 0; Q.cls = p.get('k') || '1'; Q.direct = p.get('x') === '1'; Q.bags = +p.get('b') || 0; return true;
+  const p = new URLSearchParams(s), trip = p.get('trip') || (p.get('r') ? 'return' : 'oneway');
+  Q.ad = Math.max(1, +p.get('a') || 1); Q.ch = +p.get('c') || 0; Q.inf = +p.get('i') || 0; Q.cls = p.get('k') || '1'; Q.direct = p.get('x') === '1'; Q.bags = +p.get('b') || 0;
+  if (trip === 'multi') {
+    let legs; try { legs = JSON.parse(p.get('mc') || '[]'); } catch { return false; }
+    if (!Array.isArray(legs) || legs.length < 2 || legs.length > 6) return false;
+    Q.legs = legs.map(l => ({ from: airportInfo(String(l.from || '').toUpperCase(), l.fromCity, l.fromName), to: airportInfo(String(l.to || '').toUpperCase(), l.toCity, l.toName), date: String(l.date || '') }));
+    Q.trip = 'multi'; Q.from = Q.legs[0].from; Q.to = Q.legs[0].to; Q.date = Q.legs[0].date; Q.ret = ''; return true;
+  }
+  if (!p.get('f') || !p.get('t') || !p.get('d')) return false;
+  Q.trip = trip === 'return' ? 'return' : 'oneway'; Q.from = { code: p.get('f').toUpperCase(), city: p.get('fc') || p.get('f'), name: p.get('fn') || '' }; Q.to = { code: p.get('t').toUpperCase(), city: p.get('tc') || p.get('t'), name: p.get('tn') || '' };
+  Q.date = p.get('d'); Q.ret = p.get('r') || ''; return true;
 }
 
 /* one delegated listener drives every data-a control */
@@ -336,7 +403,7 @@ async function loadPromos() {
 /* =====================================================================
    RESULTS
    ===================================================================== */
-const R = { res: null, loading: false, err: null, sort: 'best', f: { stops: 'any', bands: [], air: [], max: 0, fno: '' }, tok: 0 };
+const R = { res: null, loading: false, err: null, sort: 'best', f: { stops: 'any', bands: [], air: [], max: 0, fno: '' }, multi: null, tok: 0 };
 const hm = s => String(s || '').slice(11, 16), dOf = s => String(s || '').slice(0, 10);
 const dur = m => { m = Math.round(+m || 0); return Math.floor(m / 60) + 'h ' + pad(m % 60) + 'm'; };
 const plusDays = i => Math.round((parse(dOf(i.arr)) - parse(dOf(i.dep))) / 864e5);
@@ -354,15 +421,49 @@ async function viewFlights(qstr) {
   $('#view').innerHTML = `<div class="rhead"><div id="shost"></div></div><div class="rpage"><aside class="filters" id="filters" aria-label="Filters"></aside><section id="rmain"></section></div>`;
   mountSearch($('#shost'));
   if (!ME.user) { $('#rmain').innerHTML = `<div class="state"><div class="ic">${ic('lock', 'lg')}</div><h3>Sign in to see live fares</h3><p>Flight fares are available to approved travel agents. Sign in, or apply for a partner account if you do not have one yet.</p><div class="acts"><button class="btn pri" data-a="gate">Sign in</button><a class="btn out" href="#/signup">Apply as a travel agent</a></div></div>`; $('#filters').style.display = 'none'; openLogin({ trip: true, then: () => route() }); return; }
-  R.sort = 'best'; R.f = { stops: 'any', bands: [], air: [], max: 0, fno: '' }; R.res = null; R.err = null; R.loading = true; const tok = ++R.tok; paintMain();
+  R.sort = 'best'; R.f = { stops: 'any', bands: [], air: [], max: 0, fno: '' }; R.res = null; R.err = null; R.loading = true; R.multi = Q.trip === 'multi' ? { legs: Q.legs.map(l => ({ ...l })), index: 0, chosen: [], complete: false } : null; const tok = ++R.tok; paintMain();
   try {
-    const p = new URLSearchParams({ from: Q.from.code, to: Q.to.code, date: Q.date, adults: Q.ad, children: Q.ch, infants: Q.inf, cls: Q.cls }); if (Q.ret) p.set('ret', Q.ret); if (Q.direct) p.set('direct', '1'); if (Q.bags) p.set('bags', Q.bags);
-    const r = await api('/api/search/flights?' + p); if (tok !== R.tok) return; r.items = (r.items || []).map((x, k) => ({ ...x, _k: k })); R.res = r;
+    let url;
+    if (Q.trip === 'multi') {
+      const p = new URLSearchParams({ legs: JSON.stringify(Q.legs.map(l => ({ from: l.from.code, to: l.to.code, date: l.date }))), adults: Q.ad, children: Q.ch, infants: Q.inf, cls: Q.cls }); if (Q.direct) p.set('direct', '1'); if (Q.bags) p.set('bags', Q.bags); url = '/api/search/flights/multi?' + p;
+    } else {
+      const p = new URLSearchParams({ from: Q.from.code, to: Q.to.code, date: Q.date, adults: Q.ad, children: Q.ch, infants: Q.inf, cls: Q.cls }); if (Q.ret) p.set('ret', Q.ret); if (Q.direct) p.set('direct', '1'); if (Q.bags) p.set('bags', Q.bags); url = '/api/search/flights?' + p;
+    }
+    const r = await api(url); if (tok !== R.tok) return; r.items = (r.items || []).map((x, k) => ({ ...x, _k: k })); R.res = r;
     const max = Math.max(0, ...r.items.map(x => x.price)); R.f.max = max;
   } catch (e) { if (tok !== R.tok) return; if (e.status === 401) { ME.user = null; renderNav(); return route(); } R.err = e; }
   R.loading = false; paintFilters(); paintMain();
 }
 ACTS.gate = () => openLogin({ trip: true, then: () => route() });
+async function searchMultiNext(token) {
+  if (!R.multi || R.multi.complete || !token) return;
+  R.res = null; R.err = null; R.loading = true; R.sort = 'best';
+  R.f = { stops: 'any', bands: [], air: [], max: 0, fno: '' };
+  const tok = ++R.tok; paintMain();
+  try {
+    const p = new URLSearchParams({ legs: JSON.stringify(R.multi.legs.map(l => ({ from: l.from.code, to: l.to.code, date: l.date }))), token, adults: Q.ad, children: Q.ch, infants: Q.inf, cls: Q.cls }); if (Q.direct) p.set('direct', '1'); if (Q.bags) p.set('bags', Q.bags);
+    const r = await api('/api/search/flights/multi/next?' + p); if (tok !== R.tok) return; r.items = (r.items || []).map((x, k) => ({ ...x, _k: k })); R.res = r; R.f.max = Math.max(0, ...r.items.map(x => x.price));
+  } catch (e) { if (tok !== R.tok) return; R.err = e; }
+  R.loading = false; paintFilters(); paintMain();
+}
+ACTS.retry = () => {
+  if (R.multi && R.multi.chosen.length && !R.multi.complete) return searchMultiNext(R.multi.chosen[R.multi.chosen.length - 1].token);
+  route();
+};
+ACTS.selectLeg = async v => {
+  if (!R.multi || R.multi.complete || R.loading) return;
+  const item = R.res && R.res.items.find(x => x._k === +v); if (!item) return;
+  const idx = R.multi.index, leg = R.multi.legs[idx];
+  if (idx < R.multi.legs.length - 1 && !item.token) return toast('The provider did not return a continuation token for this flight. Choose another option.', true);
+  R.multi.chosen.push({ date: leg.date, from: leg.from.code, to: leg.to.code, airline: item.airline, airlines: item.airlines, nos: item.nos, dep: item.dep, arr: item.arr, price: item.price, dur: item.dur, stops: item.stops, token: item.token });
+  if (idx >= R.multi.legs.length - 1) { R.multi.complete = true; R.res = null; R.loading = false; const f = $('#filters'); if (f) f.style.display = 'none'; paintMain(); return; }
+  R.multi.index++;
+  await searchMultiNext(item.token);
+};
+ACTS.changeMulti = () => {
+  if (R.multi && R.multi.complete) { route(); return; }
+  const form = $('#sform'); if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
 
 function visible() {
   const f = R.f; let a = R.res.items.filter(i => (f.stops === 'any' || stopsOf(i) === +f.stops) && (!f.bands.length || f.bands.includes(band(i))) && (!f.air.length || i.airlines.some(x => f.air.includes(x))) && (!f.max || i.price <= f.max) && (!f.fno || i.nos.join(' ').replace(/\s/g, '').toLowerCase().includes(f.fno.replace(/\s/g, '').toLowerCase())));
@@ -400,7 +501,7 @@ function card(i, all) {
   const air = i.airlines.length > 1 ? i.airlines.join(' + ') : i.airline;
   return `<article class="fcard"><div class="fmain"><div class="air">${logo(i.airline, i.logo)}<div style="min-width:0"><b>${esc(air)}</b><span>${esc(i.nos.join(' · ') || i.cls || '')}</span></div></div>
    <div class="tl"><div class="pt"><b>${hm(i.dep)}</b><span>${esc(i.from)}</span></div><div class="mid"><div class="du">${dur(i.dur)}</div><div class="line">${dots}</div><div class="stp2 ${i.stops ? 'st1' : 'ns'}">${i.stops ? i.stops + (i.stops > 1 ? ' stops' : ' stop') + (i.via ? ' · ' + esc(i.via) : '') : 'Non-stop'}</div></div><div class="pt e"><b>${hm(i.arr)}${ps > 0 ? `<sup>+${ps}</sup>` : ''}</b><span>${esc(i.to)}</span></div></div>
-   <div class="buy"><div><div class="price"><small>PKR</small>${fnum(i.price)}</div><div class="pn">${paxN() > 1 ? 'Total for ' + paxN() + ' travellers' : 'Per traveller'}${i.round ? ' · round trip' : ''}</div></div><button class="btn pri" data-a="req" data-v="${i._k}">Request booking</button></div></div>
+   <div class="buy"><div><div class="price"><small>PKR</small>${fnum(i.price)}</div><div class="pn">${paxN() > 1 ? 'Total for ' + paxN() + ' travellers' : 'Per traveller'}${i.round ? ' · round trip' : ''}</div></div>${Q.trip === 'multi' ? `<button class="btn pri" data-a="selectLeg" data-v="${i._k}" ${R.multi && R.multi.index < R.multi.legs.length - 1 && !i.token ? 'disabled title="No continuation token available"' : ''}>Select this flight</button>` : `<button class="btn pri" data-a="req" data-v="${i._k}">Request booking</button>`}</div></div>
    ${tags.length ? `<div class="ftag">${tags.join('')}</div>` : ''}
    <div class="fbar"><button class="dt" data-a="fdet" data-v="${i._k}" aria-expanded="false"><span>Flight details</span>${ic('down', 'sm')}</button><span>${esc(i.cls || 'Economy')}${i.plane ? ' · ' + esc(i.plane) : ''}</span></div>
    <div class="fdet" id="fd-${i._k}" hidden>${i.segs.map((s, k) => `${k ? layover(i.lay[k - 1], s) : ''}<div class="seg2"><div class="tm"><b>${hm(s.dep)}</b><span>${dShort(dOf(s.dep)).replace(/^\w+, /, '')}</span></div><div class="rail"><i></i></div><div class="bd"><b>${esc(s.fromName || s.from)} (${esc(s.from)})</b><div class="ds">${logo(s.air, s.logo).replace('class="lg"', 'class="lg" style="display:inline-grid;vertical-align:middle;width:22px;height:22px;border-radius:6px;font-size:9px;color:#fff;margin-right:6px"')}${esc(s.air)} ${esc(s.no)} · ${dur(s.dur)}</div><div class="segc">${s.plane ? `<span>${ic('plane', 'sm')}${esc(s.plane)}</span>` : ''}${s.legroom ? `<span>${ic('seat', 'sm')}${esc(s.legroom)} legroom</span>` : ''}${s.night ? `<span>${ic('moon', 'sm')}Overnight</span>` : ''}</div></div></div>
@@ -411,24 +512,41 @@ const layover = (l, s) => (l ? `<div class="lay ${l.night ? 'night' : ''}">${ic(
 
 function paintMain() {
   const m = $('#rmain'); if (!m) return;
-  const title = `<div class="rtop"><div><div class="rtitle">${esc(Q.from.city)} ${ic('arrow')} ${esc(Q.to.city)}</div><div class="rmeta">${dShort(Q.date)}${Q.ret ? ' - ' + dShort(Q.ret) : ''} &middot; ${paxTxt()} &middot; ${CABINS.find(c => c[0] === Q.cls)[1]}</div></div>
+  const multi = R.multi, activeLeg = multi && multi.legs[multi.index];
+  const title = multi ? `<div class="rtop"><div><div class="rtitle">Flight ${multi.index + 1} of ${multi.legs.length}: ${esc(activeLeg.from.city)} ${ic('arrow')} ${esc(activeLeg.to.city)}</div><div class="rmeta">${dShort(activeLeg.date)} &middot; ${paxTxt()} &middot; ${CABINS.find(c => c[0] === Q.cls)[1]}</div></div><span class="multi-step">${multi.chosen.length} of ${multi.legs.length} selected</span>${R.res && R.res.items.length ? `<button class="btn out sm fbtn" data-a="filt">${ic('filter', 'sm')}Filters</button>` : ''}</div>` : `<div class="rtop"><div><div class="rtitle">${esc(Q.from.city)} ${ic('arrow')} ${esc(Q.to.city)}</div><div class="rmeta">${dShort(Q.date)}${Q.ret ? ' - ' + dShort(Q.ret) : ''} &middot; ${paxTxt()} &middot; ${CABINS.find(c => c[0] === Q.cls)[1]}</div></div>
     <button class="btn out sm fbtn" data-a="filt">${ic('filter', 'sm')}Filters</button><div class="dnav"><button data-a="day" data-v="-1" ${Q.date <= TODAY ? 'disabled' : ''}>${ic('left', 'sm')}Previous day</button><span>${dShort(Q.date)}</span><button data-a="day" data-v="1">Next day${ic('right', 'sm')}</button></div></div>`;
-  if (R.loading) { m.innerHTML = title + `<div class="loadbar"><div style="flex:none"><span class="spinner dk"></span></div><div style="flex:1"><b>Comparing airlines and fares live</b><span>This usually takes a few seconds.</span><div class="tr" style="margin-top:10px"></div></div></div>` + Array.from({ length: 4 }, () => '<div class="sk"><div style="display:flex;gap:10px;align-items:center"><i class="l"></i><i style="width:70px"></i></div><div style="display:grid;gap:10px"><i style="width:70%"></i><i style="width:90%"></i></div><i class="b"></i></div>').join(''); return; }
-  if (R.err) { m.innerHTML = title + `<div class="state"><div class="ic">${ic('alert', 'lg')}</div><h3>We could not load fares</h3><p>${esc(R.err.status === 403 ? 'Your account does not have access to flight search.' : R.err.message)}</p><div class="acts"><button class="btn pri" data-a="retry">Try again</button></div></div>`; return; }
-  if (!R.res.configured) { m.innerHTML = title + `<div class="state"><div class="ic">${ic('plane', 'lg')}</div><h3>Live fares are not connected yet</h3><p>The administrator needs to add the flight search key in the CRM settings. You can still send a request to the desk and we will quote you by hand.</p><div class="acts"><a class="btn pri" href="/app#/queries">Open the query desk</a></div></div>`; return; }
-  const all = R.res.items; if (!all.length) { m.innerHTML = title + `<div class="state"><div class="ic">${ic('search', 'lg')}</div><h3>No flights found</h3><p>Try a different date, a nearby airport, or turn off Direct only.</p><div class="acts"><button class="btn pri" data-a="day" data-v="1">Try the next day</button></div></div>`; return; }
+  if (multi && multi.complete) {
+    m.innerHTML = title + `<div class="multi-complete"><div class="multi-complete-head"><div><h3>Multi-city itinerary selected</h3><p>Review all selected flights before sending the request to your desk.</p></div><button class="btn out sm" data-a="changeMulti">Start again</button></div>${multi.chosen.map((x, i) => `<div class="multi-selected"><span class="multi-num">${i + 1}</span><div><b>${esc(x.from)} ${ic('arrow', 'sm')} ${esc(x.to)}</b><span>${esc(x.date)} · ${esc(x.airline)} ${esc(x.nos.join(' / '))}</span></div><strong>${pkr(x.price)}</strong></div>`).join('')}<p class="multi-note">Prices are shown as returned for each selected leg; the desk will confirm the final itinerary fare and availability.</p><button class="btn pri" data-a="reqMulti">Request complete itinerary</button></div>`; return;
+  }
+  const progress = multi && multi.chosen.length ? `<div class="multi-progress">${multi.chosen.map((x, i) => `<span class="done">${i + 1}. ${esc(x.from)} ${ic('arrow', 'sm')} ${esc(x.to)} ✓</span>`).join('')}</div>` : '';
+  if (R.loading) { m.innerHTML = title + progress + `<div class="loadbar"><div style="flex:none"><span class="spinner dk"></span></div><div style="flex:1"><b>Comparing airlines and fares live</b><span>This usually takes a few seconds.</span><div class="tr" style="margin-top:10px"></div></div></div>` + Array.from({ length: 4 }, () => '<div class="sk"><div style="display:flex;gap:10px;align-items:center"><i class="l"></i><i style="width:70px"></i></div><div style="display:grid;gap:10px"><i style="width:70%"></i><i style="width:90%"></i></div><i class="b"></i></div>').join(''); return; }
+  if (R.err) { m.innerHTML = title + progress + `<div class="state"><div class="ic">${ic('alert', 'lg')}</div><h3>We could not load fares</h3><p>${esc(R.err.status === 403 ? 'Your account does not have access to flight search.' : R.err.message)}</p><div class="acts"><button class="btn pri" data-a="retry">Try again</button></div></div>`; return; }
+  if (!R.res.configured) { m.innerHTML = title + progress + `<div class="state"><div class="ic">${ic('plane', 'lg')}</div><h3>Live fares are not connected yet</h3><p>The administrator needs to add the flight search key in the CRM settings. You can still send a request to the desk and we will quote you by hand.</p><div class="acts"><a class="btn pri" href="/app#/queries">Open the query desk</a></div></div>`; return; }
+  const all = R.res.items; if (!all.length) { m.innerHTML = title + progress + `<div class="state"><div class="ic">${ic('search', 'lg')}</div><h3>No flights found</h3><p>${multi ? 'Edit this flight segment or try another date in your itinerary.' : 'Try a different date, a nearby airport, or turn off Direct only.'}</p><div class="acts">${multi ? '<button class="btn pri" data-a="changeMulti">Edit itinerary</button>' : '<button class="btn pri" data-a="day" data-v="1">Try the next day</button>'}</div></div>`; return; }
   const cheap = all.reduce((a, b) => (b.price < a.price ? b : a)), fast = all.reduce((a, b) => (b.dur < a.dur ? b : a)), top = all.find(i => i.best) || all[0], flag = { cheap: cheap._k, fast: fast._k, best: top._k };
   const rows = visible(), ins = R.res.insight, lvl = ins && ins.level ? String(ins.level).toLowerCase() : '';
   const insight = ins ? `<div class="insight ${lvl === 'low' ? 'low' : lvl === 'high' ? 'high' : ''}"><div class="ic">${ic('trend')}</div><div><b>${lvl === 'low' ? 'Fares on this route are low right now' : lvl === 'high' ? 'Fares on this route are higher than usual' : 'Fares are in the typical range'}</b><span>Lowest today ${pkr(ins.lowest)}${ins.typical && ins.typical.length === 2 ? ' · usually ' + pkr(ins.typical[0]) + ' to ' + pkr(ins.typical[1]) : ''}</span></div></div>` : '';
   const S = (k, n, sub) => `<button class="${R.sort === k ? 'on' : ''}" data-a="sort" data-v="${k}"><b>${n}</b><span>${sub}</span></button>`;
-  m.innerHTML = title + insight + `<div class="sorts">${S('best', 'Best', pkr(top.price) + ' · ' + dur(top.dur))}${S('cheap', 'Cheapest', pkr(cheap.price) + ' · ' + dur(cheap.dur))}${S('fast', 'Fastest', pkr(fast.price) + ' · ' + dur(fast.dur))}</div>
+  m.innerHTML = title + progress + insight + `<div class="sorts">${S('best', 'Best', pkr(top.price) + ' · ' + dur(top.dur))}${S('cheap', 'Cheapest', pkr(cheap.price) + ' · ' + dur(cheap.dur))}${S('fast', 'Fastest', pkr(fast.price) + ' · ' + dur(fast.dur))}</div>
     <div class="rmeta" style="margin:0 2px 12px"><b style="color:var(--ink)">${rows.length}</b> of ${all.length} flights${R.res.staff && R.res.markup ? ' · includes ' + R.res.markup + '% markup' : ''} · live fares, refreshed every 10 minutes</div>
     ${rows.length ? rows.map(i => card(i, flag)).join('') : `<div class="state"><div class="ic">${ic('filter', 'lg')}</div><h3>No flights match these filters</h3><p>Reset the filters to see all ${all.length} flights.</p><div class="acts"><button class="btn pri" data-a="resetF">Reset filters</button></div></div>`}`;
 }
-ACTS.retry = () => route();
-
 /* request a booking = a flight query on the agent's desk */
 const fText = i => `${i.airline} ${i.nos.join('/')} · ${i.from} ${hm(i.dep)} → ${i.to} ${hm(i.arr)} · ${i.stops ? i.stops + ' stop' : 'non-stop'} · ${Q.date}${Q.ret ? ' / return ' + Q.ret : ''} · ${paxN()} traveller${paxN() > 1 ? 's' : ''} · ${pkr(i.price)}`;
+ACTS.reqMulti = () => {
+  if (!R.multi || !R.multi.complete) return;
+  const itinerary = R.multi.chosen.map((x, i) => ({ leg: i + 1, date: x.date, from: x.from, to: x.to, airline: x.airline, flightNumbers: x.nos, departure: x.dep, arrival: x.arr, displayedPrice: x.price }));
+  const text = 'Multi-city flight itinerary\n' + itinerary.map(x => `Flight ${x.leg}: ${x.from} to ${x.to} on ${x.date} · ${x.airline} ${x.flightNumbers.join('/') } · displayed price PKR ${fnum(x.displayedPrice)}`).join('\n') + `\n${paxN()} traveller(s) · ${CABINS.find(c => c[0] === Q.cls)[1]} · Final fare and availability to be confirmed.`;
+  const m = modal(`<div class="mhead"><div class="lk">${ic('send', 'lg')}</div><h3>Request multi-city itinerary</h3><p>The desk will confirm the complete itinerary, fare and availability.</p></div><div class="mbody"><div class="trip">${R.multi.chosen.map(x => `${esc(x.from)} ${ic('arrow', 'sm')} ${esc(x.to)} · ${esc(x.date)}`).join('<br>')}<span>${paxTxt()} · ${CABINS.find(c => c[0] === Q.cls)[1]}</span></div><label class="fld" style="margin-top:16px"><span>Notes for the desk <small>optional</small></span><div class="inp ta"><textarea id="rq-multi-n" rows="3" placeholder="Passenger names, baggage or other requirements..."></textarea></div></label><button class="nx" style="width:100%" id="rq-multi-go">Send itinerary request</button></div>`);
+  $('#rq-multi-go', m).addEventListener('click', async ev => {
+    const b = ev.currentTarget; b.disabled = true; b.innerHTML = '<span class="spinner sm"></span>';
+    try {
+      await api('/api/rpc', { method: 'POST', body: JSON.stringify({ op: 'addQuery', type: 'flight', source: 'portal', text: text + ($('#rq-multi-n').value.trim() ? '\n' + $('#rq-multi-n').value.trim() : ''), details: { kind: 'flight', tripType: 'multi-city', legs: itinerary, pax: paxN(), cabin: CABINS.find(c => c[0] === Q.cls)[1] } }) });
+      modal(`<div class="mbody" style="padding-top:36px;text-align:center"><div class="done"><div class="big">${ic('check')}</div><h3 style="font-size:23px">Request sent</h3><p style="margin:10px auto 22px">The desk has your full multi-city itinerary and will confirm the details.</p></div><a class="btn pri w" href="/app#/queries">View my queries</a><button class="btn out w" style="margin-top:10px" data-a="closeModal">Keep searching</button></div>`);
+    } catch (e) { toast(e.message, true); b.disabled = false; b.textContent = 'Send itinerary request'; }
+  });
+};
+
 ACTS.req = v => {
   const i = R.res.items.find(x => x._k === +v); if (!i) return;
   const m = modal(`<div class="mhead"><div class="lk">${ic('send', 'lg')}</div><h3>Request this booking</h3><p>The desk will confirm the fare and seats, then you can book from your dashboard.</p></div><div class="mbody"><div class="trip" style="flex-wrap:wrap;text-align:center">${esc(i.airline)} ${esc(i.nos.join('/'))}<span>${esc(i.from)} ${hm(i.dep)} to ${esc(i.to)} ${hm(i.arr)} · ${pkr(i.price)}</span></div>
