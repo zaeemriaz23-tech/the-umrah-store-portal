@@ -414,3 +414,22 @@ table.t td.bk-acts .btn.sm{font-size:0;gap:0;width:32px;height:32px;padding:0;ma
 @media(max-width:760px){.sx{background:linear-gradient(135deg,var(--g700),var(--g900)) top/100% 130px no-repeat,#fff;padding:18px 16px}}
 .qa{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}.qa-t{padding:12px 13px;gap:11px}.qa-t span{width:38px;height:38px}
 .stats{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+
+/* ---- v3.16: multi-select, sector filter, connecting flights, airline-code logos ---- */
+.gd-bulk{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:9px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:13px;color:var(--mute)}
+.gd-bulk.on{border-color:var(--g300);background:var(--g50);color:var(--ink)}
+.gd-bulk .sp{flex:1}
+.gd-sel{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none;cursor:default}
+.gd-sel input,.gd-selc input,.gd-bulk input[type=checkbox]{width:17px;height:17px;accent-color:var(--g700);cursor:pointer}
+.gd-selc{width:38px;padding-right:0}
+.gd-md .gd-sel{margin-top:6px}
+.gd-card.sel{outline:2px solid var(--g500);outline-offset:-2px}
+.gd-mrow.sel,.gd-table tr.sel{background:var(--g50)}
+.gd-secs{margin:0 0 10px;align-items:center}.gd-secl{font:700 12px/1 var(--sans);text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin-right:4px}
+.gd-segs{flex-basis:100%;display:grid;gap:4px;margin-top:4px;padding:8px 12px;border-left:3px solid #f1c27a;background:#fffaf0;border-radius:0 8px 8px 0}
+.gd-sg{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:12.5px}.gd-sg em{font-style:normal;font-weight:800;color:var(--ink)}.gd-sgl{display:inline-flex;align-items:center;gap:6px}
+.gd-lay{font-size:11.5px;font-weight:700;color:#9a6a12;padding-left:2px}
+.gf-seg{margin-top:10px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:#fcfdfc}
+.fd-al{display:flex;align-items:center;gap:8px}.fd-al .alogo{flex:none}
+.fside label .alogo{vertical-align:middle;margin-right:2px}
+@media(max-width:640px){.gd-bulk{flex-wrap:wrap}}

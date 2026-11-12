@@ -70,7 +70,7 @@ ACT.srGo = async () => {
   if (fl) { const f = s.f; if (!/^[A-Z]{3}$/.test(f.from || '')) { toast('Choose a departure airport from the list', 1); return; } if (!/^[A-Z]{3}$/.test(f.to || '')) { toast('Choose a destination airport from the list', 1); return; } if (!f.date) { toast('Pick a departure date', 1); return; } if (f.trip === 'return' && !f.ret) { toast('Pick a return date or choose One way', 1); return; } }
   else if (!s.h.city || !s.h.cin || !s.h.cout) { toast('Enter destination, check-in and check-out dates', 1); return; }
   const q = fl ? { from: s.f.from, to: s.f.to, date: s.f.date, ret: s.f.trip === 'return' ? s.f.ret : '', adults: s.f.adults, children: s.f.children, infants: s.f.infants, cls: s.f.cls, direct: s.f.direct ? '1' : '' } : { city: cityQuery(s.h), cin: s.h.cin, cout: s.h.cout, adults: s.h.adults, children: s.h.children, rooms: s.h.rooms || 1, stars: s.h.stars ? [3, 4, 5].filter(n => n >= s.h.stars).join(',') : '', free: s.h.free ? '1' : '' };
-  s.loading = true; s.err = ''; s.res = null; s.fa = []; s.hs = []; s.stops = ''; s.tb = []; s.maxp = 0; s.hmax = 0; s.hr = 0; s.hfree = false; s.fn = ''; drawRes();
+  s.loading = true; s.err = ''; s.res = null; s.fa = []; s.sec = []; s.via = []; s.hs = []; s.stops = ''; s.tb = []; s.maxp = 0; s.hmax = 0; s.hr = 0; s.hfree = false; s.fn = ''; drawRes();
   const el = $('#srres'); el && el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   try { s.res = await api('/api/search/' + s.tab + '?' + new URLSearchParams(q)); s.sentQ = { ...q, fromT: s.f.fromT, toT: s.f.toT, ...(fl ? {} : { city: s.h.city, cityQ: q.city }) }; s.pick = null; s.retRes = null; s.fin = null; if (!fl) s.short = []; } catch (e) { s.err = e.message; }
   s.loading = false; drawRes();
@@ -91,10 +91,11 @@ function tripSteps() {
   return `<ol class="trip-steps" aria-label="Booking steps">${st.map((x, n) => `<li class="${n + 1 < at ? 'done' : n + 1 === at ? 'now' : ''}"${n + 1 === at ? ' aria-current="step"' : ''}><span>${n + 1 < at ? ic('check', 'sm') : n + 1}</span><div><b>${x[0]}</b><small>${x[1]}</small></div></li>`).join('')}</ol>`;
 }
 const stopTxt = i => i.stops ? i.stops + ' stop' + (i.stops > 1 ? 's' : '') : 'Direct';
-const fxBadge = (i, sz = 40) => i.logo ? `<img class="al-i" style="width:${sz}px;height:${sz}px" src="${esc(i.logo)}" alt="" loading="lazy">` : `<span class="al-i al-t" style="width:${sz}px;height:${sz}px">${esc((i.airline || '?').slice(0, 2).toUpperCase())}</span>`;
+const fxCode = i => i.code || Engine.airOfFn((i.nos || [])[0]) || '';
+const fxBadge = (i, sz = 40) => fxCode(i) ? airBadge(fxCode(i), i.airline, sz) : i.logo ? `<img class="al-i" style="width:${sz}px;height:${sz}px" src="${esc(i.logo)}" alt="" loading="lazy">` : `<span class="al-i al-t" style="width:${sz}px;height:${sz}px">${esc((i.airline || '?').slice(0, 2).toUpperCase())}</span>`;
 function flightCard(i, k, all, mode) {
-  const q = SR().sentQ, segs = i.segs.map((g, n) => `${n ? `<div class="fd-lay">${ic('clock', 'sm')} ${i.lay[n - 1] ? 'Layover ' + mins(i.lay[n - 1].dur) + ' in ' + esc(i.lay[n - 1].name || i.lay[n - 1].id) + (i.lay[n - 1].night ? ' · overnight' : '') : 'Change of plane'}</div>` : ''}
-    <div class="fd-seg"><div class="fd-tl"><b>${hm(g.dep)}</b><i></i><b>${hm(g.arr)}</b></div><div class="fd-in"><div><b>${esc(g.from)}</b> ${esc(g.fromName)}</div><div class="sub">${esc(g.air)} ${esc(g.no)} · ${mins(g.dur)}${g.plane ? ' · ' + esc(g.plane) : ''}${g.legroom ? ' · ' + esc(g.legroom) + ' legroom' : ''}</div><div><b>${esc(g.to)}</b> ${esc(g.toName)}</div>${g.delayed ? '<div class="fd-w">Often delayed by 30+ min</div>' : ''}</div></div>`).join('');
+  const q = SR().sentQ, segs = i.segs.map((g, n) => `${n ? `<div class="fd-lay">${ic('clock', 'sm')} ${i.lay[n - 1] ? 'Layover ' + mins(i.lay[n - 1].dur) + ' in ' + esc(i.lay[n - 1].name || i.lay[n - 1].id) + (i.lay[n - 1].night ? ' · overnight' : '') + (i.lay[n - 1].dur && i.lay[n - 1].dur <= 60 ? ' · <b class="fd-w">tight connection</b>' : i.lay[n - 1].dur >= 360 ? ' · <b class="fd-w">long layover</b>' : '') : 'Change of plane'}</div>` : ''}
+    <div class="fd-seg"><div class="fd-tl"><b>${hm(g.dep)}</b><i></i><b>${hm(g.arr)}</b></div><div class="fd-in"><div><b>${esc(g.from)}</b> ${esc(g.fromName)}</div><div class="sub fd-al">${(g.code || Engine.airOfFn(g.no)) ? airBadge(g.code || Engine.airOfFn(g.no), g.air, 20) : ''}<span>${esc(g.air)} ${esc(g.no)} · ${mins(g.dur)}${g.plane ? ' · ' + esc(g.plane) : ''}${g.legroom ? ' · ' + esc(g.legroom) + ' legroom' : ''}</span></div><div><b>${esc(g.to)}</b> ${esc(g.toName)}</div>${g.delayed ? '<div class="fd-w">Often delayed by 30+ min</div>' : ''}</div></div>`).join('');
   return `<article class="fx"><div class="fx-m"><div class="fx-air">${fxBadge(i)}<div><b>${esc(i.airlines.length > 1 ? i.airlines.join(' + ') : i.airline)}</b><div class="sub">${esc(i.nos.join(' · '))}${i.cls ? ' · ' + esc(i.cls) : ''}</div></div></div>
   <div class="fx-t"><div class="tmb"><div class="tt">${hm(i.dep)}</div><div class="sub">${esc(i.from)}</div></div><div class="fx-mid"><span>${mins(i.dur)}</span><div class="ln"><u></u>${Array.from({ length: i.stops }, () => '<em></em>').join('')}<u></u></div><span class="${i.stops ? 'st' : 'st dr'}">${stopTxt(i)}${i.via ? ' · ' + esc(i.via) : ''}</span></div><div class="tmb"><div class="tt">${hm(i.arr)}</div><div class="sub">${esc(i.to)}</div></div></div>
   <div class="fx-p"><b>${fmt(i.price)}</b><small>${q.ret ? (mode === 'ret' ? 'total return trip · per person' : 'return trip from · per person') : 'one way · per person'}</small>${i.best ? '<span class="bdg green">Top pick</span>' : ''}</div></div>
@@ -104,9 +105,10 @@ function flightCard(i, k, all, mode) {
 function flightRes() {
   const s = SR(); if (s.fin) return finStep(); if (s.pick) return retStep();
   const all = s.res.items, q = s.sentQ; if (!all.length) return `<div class="card">${empty('search', 'No flights found', 'Try different dates, nearby airports or remove Direct only.')}</div>`;
-  const airs = uniq(all.map(i => i.airline)).sort(), mx = Math.max(...all.map(i => i.price)), mn = Math.min(...all.map(i => i.price)), cap = s.maxp || mx;
+  const sec = s.sec || (s.sec = []), via = s.via || (s.via = []), secOf = i => i.from + '-' + i.to, viaOfI = i => (i.lay || []).map(l => l.id), allAir = i => (i.airlines && i.airlines.length ? i.airlines : [i.airline]);
+  const airs = uniq(all.flatMap(allAir)).sort(), secs = uniq(all.map(secOf)).sort(), vias = uniq(all.flatMap(viaOfI)).sort(), mx = Math.max(...all.map(i => i.price)), mn = Math.min(...all.map(i => i.price)), cap = s.maxp || mx;
   const fnq = s.fn.toLowerCase().replace(/\s/g, '');
-  const base = all.filter(i => (!s.fa.length || s.fa.includes(i.airline)) && (!s.tb.length || s.tb.includes(band(hour(i.dep)))) && i.price <= cap && (!fnq || i.nos.join('').toLowerCase().replace(/\s/g, '').includes(fnq)));
+  const base = all.filter(i => (!s.fa.length || allAir(i).some(a => s.fa.includes(a))) && (!sec.length || sec.includes(secOf(i))) && (!via.length || viaOfI(i).some(v => via.includes(v))) && (!s.tb.length || s.tb.includes(band(hour(i.dep)))) && i.price <= cap && (!fnq || i.nos.join('').toLowerCase().replace(/\s/g, '').includes(fnq)));
   const rows = base.filter(i => s.stops === '' || i.stops <= +s.stops).sort((a, b) => s.sort === 'cheap' ? a.price - b.price : s.sort === 'fast' ? a.dur - b.dur : (b.best ? 1 : 0) - (a.best ? 1 : 0) || a.price - b.price);
   const low = a => a.length ? Math.min(...a.map(i => i.price)) : 0, best = [...all].sort((a, b) => (b.best ? 1 : 0) - (a.best ? 1 : 0) || a.price - b.price)[0], fast = [...all].sort((a, b) => a.dur - b.dur)[0], cheap = [...all].sort((a, b) => a.price - b.price)[0];
   const sortTab = (id, l, it, sub) => `<button class="sx-st ${s.sort === id ? 'on' : ''}" data-act="srSortTab" data-a="${id}"><b>${l}</b><strong>${fmt(it.price)}</strong><small>${sub}</small></button>`;
@@ -119,7 +121,9 @@ function flightRes() {
   <h4>Stops</h4>${stopOpt.map(o => `<label><input type="radio" name="st" ${s.stops === o[0] ? 'checked' : ''} data-chg="srStops" value="${o[0]}">${o[1]}<span class="pf">${o[2].length ? fmt(low(o[2])) : '–'}</span></label>`).join('')}
   <h4>Departure time</h4><div class="sx-bands">${BANDS.map(b => `<button class="${s.tb.includes(b[0]) ? 'on' : ''}" data-act="srBand" data-a="${b[0]}"><b>${b[1]}</b><small>${b[2]}</small></button>`).join('')}</div>
   <h4>Max price <span class="sx-val">${fmt(cap)}</span></h4><input type="range" class="sx-rng" min="${mn}" max="${mx}" step="500" value="${cap}" data-inp="srMax" data-chg="srMaxC">
-  <h4>Airlines</h4>${airs.map(a => `<label><input type="checkbox" ${s.fa.includes(a) ? 'checked' : ''} data-chg="srAir" value="${esc(a)}">${esc(a)}<span class="pf">${fmt(low(all.filter(i => i.airline === a)))}</span></label>`).join('')}
+  ${secs.length > 1 ? `<h4>Sector</h4>${secs.map(x => `<label><input type="checkbox" ${sec.includes(x) ? 'checked' : ''} data-chg="srSec" value="${esc(x)}">${esc(x.replace('-', ' → '))}<span class="pf">${fmt(low(all.filter(i => secOf(i) === x)))}</span></label>`).join('')}` : ''}
+  <h4>Airlines</h4>${airs.map(a => `<label><input type="checkbox" ${s.fa.includes(a) ? 'checked' : ''} data-chg="srAir" value="${esc(a)}">${(() => { const hit = all.find(i => allAir(i).includes(a)), c = hit && ((hit.segs || []).find(g => g.air === a) || {}).code; return c ? airBadge(c, a, 18) : ''; })()}${esc(a)}<span class="pf">${fmt(low(all.filter(i => allAir(i).includes(a))))}</span></label>`).join('')}
+  ${vias.length ? `<h4>Connection airport</h4>${vias.map(v => `<label><input type="checkbox" ${via.includes(v) ? 'checked' : ''} data-chg="srVia" value="${esc(v)}">${esc(v)}<span class="pf">${fmt(low(all.filter(i => viaOfI(i).includes(v))))}</span></label>`).join('')}` : ''}
   <h4>Flight number</h4><input placeholder="e.g. SV 739" value="${esc(s.fn)}" data-inp="srFn"></aside>
   <div><div class="row sb" style="margin-bottom:10px"><b>${rows.length} of ${all.length} flights</b><span class="sub">${s.res.staff && s.res.markup ? 'Includes ' + s.res.markup + '% markup · ' : ''}live fares, cached up to 10 min</span></div>
   ${rows.map(i => flightCard(i, all.indexOf(i), all, 'out')).join('') || `<div class="card">${empty('filter', 'No flights match these filters', 'Reset the filters to see all results.')}</div>`}</div></div>`;
@@ -127,10 +131,12 @@ function flightRes() {
 ACT.srOpen = (k, t) => { const d = $('#fd-' + k); if (!d) return; d.hidden = !d.hidden; t.classList.toggle('open', !d.hidden); };
 ACT.srSortTab = v => { SR().sort = v; drawRes(); };
 ACT.srBand = v => { const s = SR(); s.tb = s.tb.includes(v) ? s.tb.filter(x => x !== v) : [...s.tb, v]; drawRes(); };
-ACT.srReset = () => { const s = SR(); Object.assign(s, { fa: [], stops: '', tb: [], maxp: 0, fn: '', hs: [], hr: 0, hfree: false, hmax: 0 }); drawRes(); };
+ACT.srReset = () => { const s = SR(); Object.assign(s, { fa: [], sec: [], via: [], stops: '', tb: [], maxp: 0, fn: '', hs: [], hr: 0, hfree: false, hmax: 0 }); drawRes(); };
 INP.srMax = (v, t) => { const o = t.parentElement.querySelector('.sx-val'); if (o) o.textContent = fmt(+v); };
 CHG.srMaxC = v => { const s = SR(); s.maxp = +v; s.hmax = +v; drawRes(); };
 CHG.srStops = v => { SR().stops = v; drawRes(); };
+CHG.srSec = (c, t) => { const s = SR(); s.sec = c ? [...(s.sec || []), t.value] : (s.sec || []).filter(x => x !== t.value); drawRes(); };
+CHG.srVia = (c, t) => { const s = SR(); s.via = c ? [...(s.via || []), t.value] : (s.via || []).filter(x => x !== t.value); drawRes(); };
 CHG.srAir = (c, t) => { const s = SR(); s.fa = c ? [...s.fa, t.value] : s.fa.filter(x => x !== t.value); drawRes(); };
 INP.srFn = debounce(v => { SR().fn = v; drawRes(); const e = $('input[data-inp=srFn]'); if (e) { e.focus(); e.setSelectionRange(v.length, v.length); } }, 300);
 
