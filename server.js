@@ -26,6 +26,9 @@ const X = require('./lib/extras');
 const SU = require('./lib/signup');
 const Chat = require('./lib/chat');
 const Mail = require('./lib/mailer');
+const Mod = require('./lib/modules');
+const Brand = require('./lib/brand');
+const Seat = require('./lib/meezab');
 const F = require('./lib/files');
 const E = require('./public/engine.js');
 
@@ -111,6 +114,7 @@ app.post('/api/rpc', auth, (req, res) => {
   try {
     const op = String(req.body.op || ''), f = OPS[op]; if (!f || op.startsWith('_') || !Object.prototype.hasOwnProperty.call(OPS, op)) throw new Error('Unknown operation');
     PM.gate(req.u, op, req.body);
+    Mod.gateOp(op);
     const out = f(req.u, req.body) || {};
     if (AUDITED[op] && isStaff(req.u)) PM.audit(req.u, AUDITED[op], String(req.body.id || req.body.partyId || req.body.login || out.no || out.id || ''), { op, status: req.body.status, amt: req.body.amt, kind: req.body.kind });
     save(); res.json({ ok: true, ...out });
@@ -229,13 +233,14 @@ app.get('/v/:token', async (req, res) => {
   const v = db.vouchers.find(x => x.token === req.params.token);
   const h = v && await R.voucherHtml(v, req);
   if (!h) return res.status(404).send(R.infoPage('Voucher not found', 'This voucher link is not valid.', false));
-  res.set('Cache-Control', 'no-store').send(h);
+  res.set('Cache-Control', 'no-store').send(Brand.cleanDoc(h));
 });
 
 /* ---------- live search (SerpApi) ---------- */
 app.get('/api/airports', (req, res) => limit('apt:' + req.ip, 240, 6e4) ? res.json(require('./lib/airports').find(req.query.q)) : res.status(429).json({ error: 'Too many requests' }));
 const dayISO = v => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
 const searchGate = kind => (req, res, next) => {
+  if (!Mod.enabled(kind === 'hotels' ? 'hotels' : 'flights')) return res.status(403).json({ error: 'This service is currently switched off' });
   if (req.u.role === 'supplier') return res.sendStatus(403);
   if (isStaff(req.u) && !PM.can(req.u, kind === 'hotels' ? 'search.hotels' : 'search.flights')) return res.status(403).json({ error: 'You do not have permission to use this search' });
   if (!limit('search:' + req.u.id, 40, 6e4)) return res.status(429).json({ error: 'Too many searches in a short time. Please wait a minute.' });
@@ -363,27 +368,51 @@ app.post('/api/ai/test', auth, perm('integrations.manage'), async (req, res) => 
 });
 
 /* ---------- bank accounts (public page + open API for the public list) ---------- */
+
+/* live departures for the public landing: seats come from the synchronised inventory; sold-out is automatic; supplier names are filtered */
+app.get('/api/public/departures', (req, res) => {
+  if (!Mod.enabled('groups')) return res.json({ items: [], at: '' });
+  const t = new Date().toISOString().slice(0, 10), sync = Seat.publicStatus();
+  const items = db.groups.filter(g => g.dep >= t).sort((a, b) => (a.dep < b.dep ? -1 : 1)).slice(0, 6).map(g => ({ code: g.code || g.id, airline: g.airline, dep: g.dep, ret: g.ret, n: g.n, seats: Math.max(0, g.seats | 0), soldOut: !!(g.meezab && g.meezab.soldOut) || g.seats <= 0 }));
+  res.set('Cache-Control', 'public, max-age=30').json(Brand.cleanDeep({ items, at: sync.enabled ? sync.lastOkAt : '' }));
+});
 app.get('/api/public/banks', (req, res) => res.set('Cache-Control', 'public, max-age=30').json(R.publicBanks()));
-app.get('/bank-accounts', async (req, res) => res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Robots-Tag': 'noindex' }).send(await R.bankPageHtml(req)));
+app.get('/bank-accounts', async (req, res) => res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Robots-Tag': 'noindex' }).send(Brand.cleanDoc(await R.bankPageHtml(req))));
+
+
+/* ---------- Meezab seat sync (administrator) ---------- */
+const adminOnlyEarly = (req, res, next) => (req.u && req.u.role === 'admin' ? next() : res.status(req.u ? 403 : 401).json({ error: req.u ? 'Only the administrator can use seat sync' : 'Login required' }));
+app.get('/api/seatsync', auth, adminOnlyEarly, (req, res) => res.set('Cache-Control', 'no-store').json({ ...Seat.publicStatus(), history: Seat.history(80) }));
+app.post('/api/seatsync/run', auth, adminOnlyEarly, async (req, res) => {
+  if (!limit('ssrun:' + req.u.id, 6, 6e4)) return res.status(429).json({ error: 'Please wait a minute before syncing again' });
+  PM.audit(req.u, 'integrations.changed', 'seatsync', { action: 'manual_run' });
+  const r = await Seat.runSync({ by: req.u.login || req.u.id, manual: true }); res.json({ ...r, status: Seat.publicStatus() });
+});
+app.post('/api/seatsync/session', auth, adminOnlyEarly, async (req, res) => {
+  if (!limit('sssess:' + req.u.id, 6, 6e4)) return res.status(429).json({ error: 'Too many attempts' });
+  try { PM.audit(req.u, 'integrations.changed', 'seatsync', { action: 'session_supplied' }); const r = await Seat.setSession(req.body.cookie); res.json({ ok: r.ok, error: r.error, status: Seat.publicStatus() }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 /* ---------- SEO + public pages (no login) ---------- */
-const html = (res, h, ttl = 300) => res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=' + ttl }).send(h);
+const html = (res, h, ttl = 300) => res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=' + ttl }).send(Brand.cleanDoc(h));
+const pub = (key, fn) => (req, res) => (Mod.pageEnabled(key) ? html(res, fn(req)) : res.status(404).send(R.infoPage('Not available', 'This page is not available right now.', false)));
 app.get(SEO.PAGES.offers.path, (req, res) => html(res, SEO.offersPage(req)));
-app.get(SEO.PAGES.groups.path, (req, res) => html(res, SEO.groupsPage(req)));
-app.get(SEO.PAGES.calc.path, (req, res) => html(res, SEO.calcPage(req)));
-app.get(SEO.PAGES.transport.path, (req, res) => html(res, SEO.transportPage(req)));
-app.get(SEO.PAGES.flights.path, (req, res) => html(res, SEO.flightsPage(req)));
-app.get(SEO.PAGES.hotels.path, (req, res) => html(res, SEO.hotelsPage(req)));
-app.get(SEO.PAGES.makkah.path, (req, res) => html(res, SEO.makkahPage(req)));
-app.get(SEO.PAGES.madinah.path, (req, res) => html(res, SEO.madinahPage(req)));
-app.get(SEO.PAGES.visa.path, (req, res) => html(res, SEO.visaPage(req)));
+app.get(SEO.PAGES.groups.path, pub('groups', SEO.groupsPage));
+app.get(SEO.PAGES.calc.path, pub('calc', SEO.calcPage));
+app.get(SEO.PAGES.transport.path, pub('transport', SEO.transportPage));
+app.get(SEO.PAGES.flights.path, pub('flights', SEO.flightsPage));
+app.get(SEO.PAGES.hotels.path, pub('hotels', SEO.hotelsPage));
+app.get(SEO.PAGES.makkah.path, pub('makkah', SEO.makkahPage));
+app.get(SEO.PAGES.madinah.path, pub('madinah', SEO.madinahPage));
+app.get(SEO.PAGES.visa.path, pub('visa', SEO.visaPage));
 app.get(SEO.PAGES.contact.path, (req, res) => html(res, SEO.contactPage(req)));
 app.get(SEO.PAGES.faq.path, (req, res) => html(res, SEO.faqPage(req)));
 app.get('/sitemap.xml', (req, res) => res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(SEO.sitemap(req)));
 app.get('/robots.txt', (req, res) => res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(SEO.robots(req)));
 app.get('/manifest.webmanifest', (req, res) => res.type('application/manifest+json').set('Cache-Control', 'public, max-age=3600').json(SEO.manifest(req)));
 app.get('/favicon.ico', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(path.join(PUB, 'brand', 'favicon.ico')));
-app.get('/api/public/inventory', (req, res) => res.set('Cache-Control', 'public, max-age=60').json(Inv.publicSnapshot()));
+app.get('/api/public/inventory', (req, res) => res.set('Cache-Control', 'public, max-age=60').json(Brand.cleanDeep(Inv.publicSnapshot())));
 app.post('/api/public/lead', (req, res) => {
   if (!limit('lead:' + req.ip, 6, 36e5)) return res.status(429).json({ error: 'Too many requests. Please call us instead.' });
   if (req.body.website) return res.json({ ok: true }); // honeypot
@@ -420,7 +449,7 @@ async function startServer() {
   // Bring back any uploaded file that exists in MySQL but is missing on disk (e.g. after a redeploy), then migrate existing files once.
   try { await F.restoreMissing(); } catch (e) { console.error('File restore warning:', e.message); }
   F.backfill().catch(e => console.error('File migration warning:', e.message));
-  AI.init(); X.init(); sweep();
+  AI.init(); X.init(); sweep(); Seat.start();
   setInterval(() => { sweep(); Chat.sweep(); const n = db.notifs.length; X.detect(); if (db.notifs.length !== n) D.save(); }, 60000).unref();
   setInterval(() => X.fxRefresh(false).catch(() => {}), 36e5).unref();
   setTimeout(() => X.fxRefresh(false).catch(() => {}), 5000).unref();

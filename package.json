@@ -12,10 +12,11 @@
     "node": ">=18"
   },
   "dependencies": {
+    "cheerio": "1.0.0",
     "compression": "^1.8.2",
     "express": "^4.22.3",
-    "qrcode": "^1.5.4",
-    "mysql2": "^3.24.6"
+    "mysql2": "^3.24.6",
+    "qrcode": "^1.5.4"
   },
   "optionalDependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc14"

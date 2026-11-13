@@ -374,7 +374,8 @@ ACTS.route = v => { const [a, b] = v.split(':'); Q.from = ap(a); Q.to = ap(b); s
 const FAQ = [['Who can see live fares?', 'Live airline fares and hotel rates are shown to approved travel agents. Apply once with your CNIC and company details and we activate your account after review.'], ['Can pilgrims book here too?', 'Yes. Browse group packages, price a trip in the calculator or send an enquiry. Our team confirms availability and the final price before you pay.'], ['How do agents pay?', 'Bookings post to your own ledger. Pay by bank transfer, JazzCash, Easypaisa or online by card and wallet through PayFast, and every payment gets a receipt.'], ['How long does approval take?', 'Most applications are reviewed within one working day once the documents are clear. You can check progress with your reference number.'], ['Where are your offices?', 'Lahore, Okara and Islamabad. Call or WhatsApp us to visit or to book remotely.']];
 function viewHome() {
   scene('hero'); document.body.dataset.page = 'home';
-  $('#view').innerHTML = `<section class="hero"><span class="eyebrow"><i></i>Flights across Pakistan and beyond</span><h1>Live fares for every Umrah route, on one screen</h1><p class="sub">Compare airlines, pick the fare that suits the trip, and send it to the desk in a few taps.</p><div id="shost" class="sbox-host"></div></section>
+  $('#view').innerHTML = `<section class="hero"><span class="eyebrow"><i></i>The wholesale Umrah platform for travel agents</span><h1>Book Umrah groups, flights and hotels with live seats</h1><p class="sub">One partner account for group packages, hotels, flights, transport and visas. Seat counts stay current, your ledger updates itself, and every voucher carries your name.</p><div id="shost" class="sbox-host"></div></section>
+  <section class="sec deps" id="deps" hidden></section>
   <section class="sec promos" id="promos" hidden></section>
   <section class="sec" id="routes"><h2>Popular routes from Pakistan</h2><p class="lead">Tap a route to fill the search. Live fares appear after you sign in.</p><div class="routes">${ROUTES.map(r => `<button class="route" data-a="route" data-v="${r[0]}:${r[1]}"><div><div class="cc">${r[0]} ${ic('plane', 'sm')} ${r[1]}</div><small>${APS[r[0]][0]} to ${APS[r[1]][0]}</small></div><span class="go2">${ic('arrow', 'sm')}</span></button>`).join('')}</div></section>
   <section class="sec"><h2>Everything an Umrah desk needs, in one account</h2><div class="feat"><div class="fc dark"><div class="ic">${ic('plane', 'lg')}</div><h3>Live airline fares</h3><p>Search real-time fares across airlines, filter by stops, departure time and flight number, and compare Best, Cheapest and Fastest side by side.</p><div class="tags"><span>One way and return</span><span>Cabin and baggage</span><span>Layover details</span><span>Fare insight</span></div></div>
@@ -386,12 +387,22 @@ function viewHome() {
   <section class="sec"><h2>Frequently asked questions</h2><div class="faqs">${FAQ.map(f => `<details><summary>${esc(f[0])}</summary><p>${esc(f[1])}</p></details>`).join('')}</div></section>
   <section class="help" aria-labelledby="helph"><div class="helpin"><div><h2 id="helph">Talk to a real person</h2><p>Our desk answers Umrah, flight, hotel and visa questions the same day.</p></div><div class="helpb"><button class="pill blue" type="button" data-open-chat>${ic('chat')}Live chat</button>${(ME.company.whatsapp || '+92 313 693 5568') ? `<a class="pill wa" href="https://wa.me/${esc(String(ME.company.whatsapp || '+92 313 693 5568').replace(/\D/g, ''))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<a class="pill white2" href="tel:${esc(String(ME.company.phone || '+92 313 693 5568').replace(/[^\d+]/g, ''))}">Call us</a></div></div></section>
   <div class="cta"><div><h2>Ready to book with agent rates?</h2><p>Apply once with your CNIC and company details. We will email you when your account is active.</p></div><div class="acts"><a class="pill white" href="#/signup" style="height:50px">Apply as a travel agent</a>${ME.user ? '' : '<button class="pill ghost" data-a="login" style="height:50px">I already have an account</button>'}</div></div>`;
-  mountSearch($('#shost')); flyby(); loadPromos();
+  mountSearch($('#shost')); flyby(); loadPromos(); loadDepartures();
 }
 const FLYSVG = '<svg viewBox="0 0 120 48" aria-hidden="true"><path d="M2 26l40-4 28-18c3-2 7-2 9 0l-9 19 30 2c5 .5 8 3 8 5s-3 4.5-8 5l-30 2 9 19c-2 2-6 2-9 0L42 38 2 34c-1.500-.2-2-1-2-4s.5-3.800 2-4z" fill="#fff"/></svg>';
 function flyby() {
   const el = $('#scene'); if (!el || el.querySelector('.flyby')) return;
   el.insertAdjacentHTML('beforeend', '<div class="flyby f1" aria-hidden="true"><i class="trail"></i>' + FLYSVG + '</div><div class="flyby f2" aria-hidden="true"><i class="trail"></i>' + FLYSVG + '</div><div class="cloud c1"></div><div class="cloud c2"></div>');
+}
+async function loadDepartures() {
+  const el = $('#deps'); if (!el) return;
+  try {
+    const r = await api('/api/public/departures'); if (!r.items || !r.items.length) return;
+    const d = s => { const [y, m, dd] = s.split('-'); return +dd + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m - 1]; };
+    el.hidden = false;
+    el.innerHTML = `<div class="dephead"><div><h2>Upcoming group departures</h2><p class="lead">Remaining seats shown are kept up to date automatically.${r.at ? ' Last confirmed ' + new Date(r.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.' : ''}</p></div><a class="pill ghost2" href="/umrah-group-packages">All departures</a></div>
+    <div class="depgrid">${r.items.map(g => `<a class="dep ${g.soldOut ? 'out' : ''}" href="/umrah-group-packages"><div class="deph"><b>${esc(g.airline)}</b><span class="depc">${esc(g.code)}</span></div><div class="depd">${d(g.dep)} <i>&rarr;</i> ${d(g.ret)}</div><div class="depf"><span>${g.n} nights</span>${g.soldOut ? '<em class="so">Sold out</em>' : `<em class="${g.seats <= 5 ? 'low' : 'ok'}">${g.seats} seats left</em>`}</div></a>`).join('')}</div>`;
+  } catch { /* the landing works without it */ }
 }
 async function loadPromos() {
   let list = []; try { list = (await api('/api/public/promos')).items || []; } catch { return; }
