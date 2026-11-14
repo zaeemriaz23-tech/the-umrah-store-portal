@@ -79,18 +79,132 @@
   }
   // converts pdf.js text content to upright viewport coordinates (handles rotated pages)
   const pageFrom = (vp, tc) => ({ width: vp.width, items: tc.items.map(t => { const v = vp.convertToViewportPoint(t.transform[4], t.transform[5]); return { str: t.str, x: v[0], y: vp.height - v[1] }; }) });
-  const api = { parseGroupsFromPages, cleanDist, pageFrom };
-  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PdfParse = api;
-  // browser helper
-  if (root.pdfjsLib) {
-    api.parsePdfFile = async function (file) {
-      root.pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.js';
-      const doc = await root.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise, pages = [];
-      for (let n = 1; n <= doc.numPages; n++) {
-        const pg = await doc.getPage(n), vp = pg.getViewport({ scale: 1 }), tc = await pg.getTextContent();
-        pages.push(api.pageFrom(vp, tc));
-      }
-      return parseGroupsFromPages(pages);
-    };
+  const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  const isoFromDmy = (s, fallbackYear) => {
+    const m = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/.exec(String(s || '').trim());
+    if (!m) return '';
+    let y = +m[3]; if (y < 100) y += y >= 70 ? 1900 : 2000;
+    const d = +m[1], mo = +m[2];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+    return iso(y, mo - 1, d);
+  };
+  const isoFromDayMon = (day, mon, year) => {
+    const m = MONTHS[String(mon || '').slice(0, 3).toLowerCase()];
+    if (m == null) return '';
+    return iso(year, m, +day);
+  };
+  function voucherRows(pages) {
+    const out = [];
+    for (const page of pages || []) for (const row of rowsOf(page)) {
+      const text = row.items.map(i => String(i.str || '').trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      if (text) out.push(text);
+    }
+    return out;
   }
+  function parseHotelVoucherFromPages(pages, now) {
+    now = now || new Date();
+    const rows = voucherRows(pages), text = rows.join('\n');
+    const pick = re => { const m = re.exec(text); return m ? String(m[1] || '').trim() : ''; };
+    const issuedBy = pick(/\bLAT\s*[-:]\s*(.+?)(?=\s+Hotel\s+Voucher|\n|$)/i) || pick(/^\s*(.+?)\s*\n\s*Hotel\s+Voucher/im);
+    const voucherNo = pick(/Voucher\s+No\s*:\s*([A-Z0-9-]+)/i);
+    const branch = pick(/Branch\s*:\s*([A-Z0-9-]+)/i);
+    const iata = pick(/IATA\s*:\s*(.+?)(?=\s+Voucher\s+No\s*:|\n|$)/i);
+    const saudiCompany = pick(/Saudi\s+Company\s*:\s*(.+?)(?=\s+Date\s*:|\n|$)/i);
+    const manualNo = pick(/Manual\s+No\s*:\s*(.*?)(?=Group\s*#?\.?\s*\d+|\n|$)/i);
+    const groupNo = pick(/Group\s*#?\.?\s*:?\s*(\d+)/i);
+    const whatsapp = pick(/Whatsapp[ \t]*:[ \t]*([^\r\n]*)/i);
+    const voucherDateRaw = pick(/Date\s*:\s*(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/i);
+    const voucherDate = isoFromDmy(voucherDateRaw, now.getFullYear());
+    const familyHead = pick(/Family\s+Head\s*:\s*(.+?)(?=\s+Total\s+PAX\s*:|\s+Whatsapp\s*:|\n|$)/i);
+    const totalPax = +(pick(/Total\s+PAX\s*:\s*(\d+)/i) || 0);
+    const packageName = pick(/Package\s*:\s*(.+?)(?=\s+Manual\s+No\s*:|\s+Group\s*#?\.?\s*:|\n|$)/i);
+    const accountName = issuedBy.replace(/^LAT\s*[-:]\s*/i, '').trim();
+
+    const pax = [];
+    let inPax = false;
+    for (const line of rows) {
+      if (/Pilgrims\s+Details/i.test(line)) { inPax = true; continue; }
+      if (inPax && /\bAdults\s*:/i.test(line)) break;
+      if (!inPax || /Mutamer\s+Name|Gender\s+PPNO/i.test(line)) continue;
+      const m = /^(.+?)\s+(Male|Female)\s+([A-Z0-9]{6,12})\s+(Adult|Child|Infant)\b(?:\s+(Yes|No))?/i.exec(line);
+      if (!m) continue;
+      pax.push({ n: m[1].trim().replace(/\s{2,}/g, ' '), pp: m[3].toUpperCase(), dob: '', nat: 'Pakistani', g: /^Female$/i.test(m[2]) ? 'F' : 'M', t: m[4][0].toUpperCase() + m[4].slice(1).toLowerCase() });
+    }
+
+    const anchorDate = voucherDate || (now.getFullYear() + '-01-01');
+    const anchor = new Date(anchorDate + 'T00:00:00');
+    const anchorYear = Number.isFinite(anchor.getTime()) ? anchor.getFullYear() : now.getFullYear();
+    const anchorMonth = Number.isFinite(anchor.getTime()) ? anchor.getMonth() : now.getMonth();
+    const hotels = [];
+    let inAccommodation = false;
+    for (const line of rows) {
+      if (/Accommodation\s+Details/i.test(line)) { inAccommodation = true; continue; }
+      if (inAccommodation && /Total\s+Nights\s*:/i.test(line)) break;
+      if (!inAccommodation || /Hotel\s+Name|Confirm\s+No|Check\s*In/i.test(line)) continue;
+      const dates = [...line.matchAll(/\b(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})\b/g)].map(m => m[1]);
+      if (dates.length < 2) continue;
+      const cityMatches = [...line.matchAll(/\b(Madinah|Medinah|Makkah|Jeddah)\b/gi)];
+      if (!cityMatches.length) continue;
+      // Some supplier exports repeat the city in the Hotel Name column when the hotel is blank (e.g. "Makkah Makkah").
+      const cityMatch = cityMatches.length > 1 && cityMatches[0].index === 0 ? cityMatches[1] : cityMatches[0];
+      const cityRaw = cityMatch[1], city = /^medinah$/i.test(cityRaw) ? 'Madinah' : cityRaw[0].toUpperCase() + cityRaw.slice(1).toLowerCase();
+      let hotel = line.slice(0, cityMatch.index).trim();
+      if (norm(hotel) === norm(city)) hotel = '';
+      const tail = line.slice(cityMatch.index + cityMatch[0].length);
+      const mealMatch = /\b(RO|BB|HB|FB|EP|CP|MAP|AP)\b/i.exec(tail);
+      const room = (mealMatch ? tail.slice(0, mealMatch.index) : tail).trim().replace(/\s{2,}/g, ' ');
+      const mealCode = mealMatch ? mealMatch[1].toUpperCase() : '';
+      const meals = { RO: 'Room only', BB: 'Breakfast', HB: 'Half board', FB: 'Full board', EP: 'Room only', CP: 'Breakfast', MAP: 'Half board', AP: 'Full board' };
+      const cin = isoFromDmy(dates[0], anchorYear), cout = isoFromDmy(dates[1], anchorYear);
+      const nightsMatch = /\s(\d{1,2})\s*$/.exec(line);
+      let nights = nightsMatch ? +nightsMatch[1] : 0;
+      if (!nights && cin && cout) nights = Math.max(1, Math.round((new Date(cout) - new Date(cin)) / 86400000));
+      hotels.push({ hotel, city, roomType: room, meal: meals[mealCode] || 'Room only', mealCode, cin, cout, nights, confirm: '' });
+    }
+
+    const legs = [];
+    const legRe = /\b([A-Z0-9]{2,3}-\d{2,4})\s+([A-Z]{3})-([A-Z]{3})\s+(\d{1,2})-([A-Z]{3})\s+(\d{2}:\d{2})\s+(\d{1,2})-([A-Z]{3})\s+(\d{2}:\d{2})/gi;
+    let lm;
+    while ((lm = legRe.exec(text))) {
+      const monthDep = MONTHS[lm[5].toLowerCase()], monthArr = MONTHS[lm[8].toLowerCase()];
+      let year = anchorYear;
+      if (monthDep != null && monthDep < anchorMonth) year++;
+      const depDate = isoFromDayMon(lm[4], lm[5], year);
+      let arrYear = year; if (monthArr != null && monthDep != null && monthArr < monthDep) arrYear++;
+      legs.push({ fno: lm[1].replace(/-/g, '-'), from: lm[2], to: lm[3], date: depDate, dep: lm[6], arrDate: isoFromDayMon(lm[7], lm[8], arrYear), arr: lm[9] });
+    }
+
+    let transport = null, inTransport = false;
+    for (const line of rows) {
+      if (/Transport\s*\/\s*Services/i.test(line)) { inTransport = true; continue; }
+      if (inTransport && /Departure\s+from\s+Pakistan/i.test(line)) break;
+      if (!inTransport || /^Name\s+Type\s+BRN/i.test(line)) continue;
+      const m = /^(.+?)\s+(By\s+.+)$/i.exec(line);
+      if (m) { transport = { name: m[1].trim(), type: m[2].trim() }; break; }
+    }
+    const note = pick(/Note\s*:\s*(.+?)(?:\n|$)/i);
+    const adults = +(pick(/Adults\s*:\s*(\d+)/i) || 0), children = +(pick(/Childs?\s*:\s*(\d+)/i) || 0), infants = +(pick(/Infants?\s*:\s*(\d+)/i) || 0), totalBeds = +(pick(/Total\s+BEDS\s*:\s*(\d+)/i) || 0);
+    if (!pax.length && !hotels.length && !legs.length) throw new Error('No readable hotel voucher data was found. This PDF may be scanned or use an unsupported layout.');
+    const warnings = [];
+    if (totalPax && pax.length !== totalPax) warnings.push(`Voucher says ${totalPax} passengers, but ${pax.length} traveller rows were read. Review the traveller list.`);
+    if (!accountName) warnings.push('The issuing agent name was not detected. Select the correct account manually.');
+    if (!hotels.length) warnings.push('No accommodation rows were detected. Add hotel services manually.');
+    return { kind: 'hotel-voucher', issuedBy, accountName, voucherNo, branch, voucherDate, familyHead, totalPax, packageName, iata, saudiCompany, manualNo, groupNo, whatsapp, totalBeds, pax, hotels, legs, transport, note, counts: { adults, children, infants }, warnings, rawText: text };
+  }
+  const api = { parseGroupsFromPages, parseHotelVoucherFromPages, cleanDist, pageFrom, voucherRows, isoFromDmy };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PdfParse = api;
+  // browser helpers share one PDF reader so group imports and hotel-voucher imports use identical extraction.
+  async function readPdfPages(file) {
+    if (!root.pdfjsLib) throw new Error('PDF reader has not loaded. Refresh the page and try again.');
+    root.pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.js';
+    const doc = await root.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise, pages = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const pg = await doc.getPage(n), vp = pg.getViewport({ scale: 1 }), tc = await pg.getTextContent();
+      pages.push(api.pageFrom(vp, tc));
+    }
+    return pages;
+  }
+  api.parsePdfFile = async file => parseGroupsFromPages(await readPdfPages(file));
+  api.parseHotelVoucherFile = async file => parseHotelVoucherFromPages(await readPdfPages(file));
 })(typeof window !== 'undefined' ? window : globalThis);

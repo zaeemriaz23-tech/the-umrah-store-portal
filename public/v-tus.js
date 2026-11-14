@@ -49,11 +49,11 @@ function brandTab() {
   <label class="chk" style="margin:10px 0"><input type="checkbox" id="bfOn" ${b.enabled !== false ? 'checked' : ''}> Filter is active</label>
   <div class="fld"><label>Try it</label><textarea id="bfTry" rows="3" placeholder="Paste text to preview the result">Umrah group via Meezab Group CRM</textarea></div>
   <button class="btn sm" data-act="bfPreview">${ic('eye', 'sm')}Preview</button><div id="bfOut" class="okbox" style="margin-top:10px;display:none"></div></div></div>
-  <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn pri" data-act="bfSave">${ic('check', 'sm')}Save brand filter</button></div></div>`;
+  <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn pri" data-act="brandFilterSave">${ic('check', 'sm')}Save brand filter</button></div></div>`;
 }
 const bfBody = () => ({ terms: val('bfTerms'), replacement: val('bfRep'), enabled: $('#bfOn').checked });
 ACT.bfPreview = async () => { try { const r = await rpc('previewBrand', { ...bfBody(), text: val('bfTry') }); const o = $('#bfOut'); o.style.display = 'block'; o.textContent = r.text || '(empty)'; } catch (e) { toast(e.message, true); } };
-ACT.bfSave = (a, btn) => doRpc(btn, 'saveBrandFilter', bfBody(), 'Brand filter saved').catch(() => {});
+ACT.brandFilterSave = (a, btn) => doRpc(btn, 'saveBrandFilter', bfBody(), 'Brand filter saved').catch(() => {});
 
 function syncTab() {
   const z = S.seatSyncAdmin; if (!z) return empty('shield', 'Not available', 'Only administrators can manage seat sync.');

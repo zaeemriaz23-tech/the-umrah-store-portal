@@ -1,3 +1,11 @@
+# 3.16.1
+- Fixed a duplicate action name that caused the Brand Filter save handler to override booking creation.
+- Isolated legacy Settings > Banking actions from the newer Bank accounts workspace actions.
+- Added hotel-voucher PDF import to new booking forms: traveller names/passports, accommodation stays, outbound/return flights, transport, voucher metadata and notes are extracted for review.
+- Added a required agent/customer account confirmation step when importing a voucher; ambiguous or missing account matches must be selected manually.
+- Voucher import does not save a booking automatically; users review the imported fields and prices and explicitly create the booking.
+- Added regression coverage for booking save-action collisions and hotel-voucher extraction. No database schema changes or data migrations.
+
 # 3.16.0
 - Automatic Meezab group/package inventory sync (lib/supplier.js): GroupOid/PackageCode matching, create/update/deactivate (never delete), seat safety, retries, session renewal, pagination, history. Admin: Services & sync > Supplier sync.
 - Admin-only Maintenance mode enforced server-side (lib/maintenance.js), stored in the CRM state.

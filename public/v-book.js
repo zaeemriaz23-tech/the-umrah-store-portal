@@ -116,6 +116,7 @@ function acctBox() {
 function bfRender() {
   const st = isStaff(), edit = !!BF.id;
   $('#bf').innerHTML = `<datalist id="ppl">${Object.keys(knownPax()).map(k => `<option value="${esc(k)}">${esc(knownPax()[k].n)}</option>`).join('')}</datalist>
+  ${!edit && isStaff() ? `<div class="card cp" style="margin-bottom:14px"><div class="row sb" style="flex-wrap:wrap;gap:12px"><div><div class="sec" style="margin:0 0 4px">Import hotel voucher PDF</div><p class="hint" style="margin:0">Read a supplier voucher and prefill travellers, hotel stays, flights and transport. Review the account before importing.</p></div><label class="btn" style="position:relative;overflow:hidden;cursor:pointer">${ic('upload', 'sm')}Upload voucher<input type="file" accept="application/pdf" data-chg="bfVoucher" style="position:absolute;inset:0;opacity:0;width:100%;cursor:pointer" aria-label="Upload hotel voucher PDF"></label></div><div id="bf-voucher-state" class="sub" style="margin-top:8px"></div></div>` : ''}
   <div class="card cp"><div class="sec">1 · Account</div><div id="bf-acct">${acctBox()}</div></div><div class="gap"></div>
   <div class="card cp"><div class="row sb"><div class="sec" style="margin:0">2 · Travellers (identified by passport number)</div><button class="btn sm" data-act="bfAddPax">${ic('plus', 'sm')}Add traveller</button></div>${BF.pax.map(paxRow).join('')}</div><div class="gap"></div>
   <div class="card cp"><div class="sec">3 · Category</div><div class="g3">${fld('Booking category', selB('category', BF.category, S.categories))}<div class="fld"><span>Travel dates (from services)</span><div style="padding:9px 0;font-weight:700" id="bf-dates">-</div></div></div></div><div class="gap"></div>
@@ -132,6 +133,66 @@ ACT.bfAddSvc = t => { BF.services.push(SVC_DEF(t)); bfRender(); setTimeout(() =>
 ACT.bfDelSvc = i => { BF.services.splice(+i, 1); bfRender(); };
 ACT.newCust = () => openModal({ title: 'New B2C customer', body: `<div class="g1">${fld('Customer name *', '<input id="nc-n">')}${fld('Phone', '<input id="nc-p">')}</div><p class="hint" style="margin-top:10px">Customers get their own separate ledger and never log in.</p>`, foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn pri" data-act="ncSave">Add customer</button>' });
 ACT.ncSave = async (a, b) => { try { const r = await rpc('saveParty', { kind: 'customer', name: val('nc-n'), phone: val('nc-p') }); closeModal(); await load(); BF.partyId = r.id; bfRender(); } catch (e) { toast(e.message, true); } };
+function voucherPartyMatch(name) {
+  const target = String(name || '').toLowerCase().replace(/\b(lat|travel|travels|travel\s+and\s+tours|tours|agency|agency\s+services)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  if (!target) return '';
+  const rows = (S.parties || []).filter(p => p.kind !== 'supplier' && p.active !== false).map(p => ({ p, n: String(p.name || '').toLowerCase().replace(/\b(lat|travel|travels|travel\s+and\s+tours|tours|agency|agency\s+services)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ') }));
+  const matches = rows.filter(x => x.n && (x.n === target || x.n.replace(/\s/g, '') === target.replace(/\s/g, '')));
+  return matches.length === 1 ? String(matches[0].p.id) : '';
+}
+function voucherToBooking(v) {
+  const services = [];
+  (v.hotels || []).forEach((h, i) => services.push({ ...SVC_DEF('hotel'), title: h.hotel || (h.city + ' accommodation'), qty: Math.max(1, +h.nights || 1), from: h.cin, to: h.cout,
+    d: { ...SVC_DEF('hotel').d, city: h.city, hotel: h.hotel, stars: '', room: h.roomType, meal: h.meal, rooms: '', cin: h.cin, cout: h.cout } }));
+  if (v.legs && v.legs.length) {
+    const out = v.legs[0], back = v.legs[1] || {};
+    services.push({ ...SVC_DEF('flight'), title: [out.fno + ' ' + out.from + '-' + out.to, back.fno ? back.fno + ' ' + back.from + '-' + back.to : ''].filter(Boolean).join(' / '), qty: Math.max(1, v.pax.length), from: out.date, to: back.date || out.date,
+      d: { ...SVC_DEF('flight').d, fno: out.fno, from: out.from, to: out.to, date: out.date, dep: out.dep, arr: out.arr, rfno: back.fno || '', rfrom: back.from || '', rto: back.to || '', rdate: back.date || '', rdep: back.dep || '', rarr: back.arr || '' } });
+  }
+  if (v.transport) services.push({ ...SVC_DEF('transport'), title: [v.transport.name, v.transport.type].filter(Boolean).join(' - ') || 'Transport / Services', d: { ...SVC_DEF('transport').d, route: v.transport.name || '', vehicle: v.transport.type || '' } });
+  const notes = [v.note, v.voucherNo ? 'Supplier voucher ' + v.voucherNo : ''].filter(Boolean).join(' | ');
+  const internal = ['Imported hotel voucher', v.issuedBy ? 'Issued by: ' + v.issuedBy : '', v.branch ? 'Branch: ' + v.branch : '', v.familyHead ? 'Family head: ' + v.familyHead : '', v.voucherDate ? 'Voucher date: ' + v.voucherDate : '', v.iata ? 'IATA / source: ' + v.iata : '', v.saudiCompany ? 'Saudi company: ' + v.saudiCompany : '', v.groupNo ? 'Supplier group: ' + v.groupNo : '', v.manualNo ? 'Manual no.: ' + v.manualNo : '', v.totalBeds ? 'Total beds: ' + v.totalBeds : '', v.counts ? 'Adults / children / infants: ' + [v.counts.adults, v.counts.children, v.counts.infants].join(' / ') : '', v.whatsapp ? 'Supplier WhatsApp: ' + v.whatsapp : ''].filter(Boolean).join('\n');
+  return { category: v.packageName || 'Custom', pax: v.pax, services, notes, internal };
+}
+CHG.bfVoucher = async (v, t) => {
+  const file = t.files && t.files[0]; if (!file) return;
+  t.value = '';
+  const state = $('#bf-voucher-state');
+  try {
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) throw new Error('Please choose a PDF hotel voucher.');
+    if (file.size > 15 * 1024 * 1024) throw new Error('PDF must be 15 MB or smaller.');
+    if (BF && BF.id) throw new Error('Voucher import is only available when creating a new booking, to protect existing booking data.');
+    const hasDraft = BF && (BF.services.length || BF.pax.some(x => x.n || x.pp) || BF.notes || BF.partyId);
+    if (hasDraft && !(await confirmBox('Replace current draft?', 'Importing this voucher will replace the unsaved fields in this new booking form. Existing saved bookings are never changed.', 'Replace draft', true))) return;
+    if (state) state.textContent = 'Reading voucher PDF…';
+    await loadPdf();
+    const parsed = await PdfParse.parseHotelVoucherFile(file);
+    const candidate = voucherToBooking(parsed);
+    if (!candidate.pax.length) throw new Error('No traveller rows could be read from this voucher.');
+    UI.bfVoucherImport = { parsed, candidate, matchedPartyId: voucherPartyMatch(parsed.accountName) };
+    const accountOptions = (S.parties || []).filter(x => x.kind !== 'supplier' && x.active !== false).map(x => [x.id, x.name + (x.kind === 'customer' ? ' (Customer)' : ' (Agent)')]);
+    const summary = `<div class="card cp" style="margin-bottom:12px"><b>${esc(parsed.voucherNo || file.name)}</b><p class="sub" style="margin:6px 0">${esc(parsed.issuedBy || 'Issuing agent not detected')} · ${esc(parsed.branch || 'Branch not detected')} · ${parsed.totalPax || parsed.pax.length} passenger(s)</p><div class="g3"><div><b>${parsed.pax.length}</b><div class="sub">Travellers read</div></div><div><b>${parsed.hotels.length}</b><div class="sub">Hotel stays read</div></div><div><b>${parsed.legs.length}</b><div class="sub">Flight legs read</div></div></div></div>
+      <div class="sub" style="margin:8px 0">Family head: <b>${esc(parsed.familyHead || '-')}</b></div><div class="sub" style="margin:8px 0">Hotel stays: ${parsed.hotels.map(h => esc((h.hotel || h.city) + ' · ' + h.city + ' · ' + h.cin + ' to ' + h.cout)).join('<br>') || 'None detected'}</div>
+      ${parsed.warnings.length ? `<div class="warnbox" style="margin:10px 0">${parsed.warnings.map(esc).join('<br>')}</div>` : ''}
+      ${isStaff() ? `<div class="fld"><span>Agent / customer account *</span><select id="bvi-party">${opts(accountOptions, UI.bfVoucherImport.matchedPartyId, 'Select the correct account…')}</select><small class="sub">The voucher issuer is ${esc(parsed.accountName || 'unknown')}. Confirm the correct ledger account before importing.</small></div>` : ''}
+      <p class="hint" style="margin-top:12px">Prices, supplier costs, confirmation numbers and missing passenger details are not present in this PDF; those fields will remain blank for manual review. No booking is saved until you press Create booking.</p>`;
+    openModal({ title: 'Review imported hotel voucher', wide: true, body: summary, foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn pri" data-act="bfApplyVoucher">Import into booking</button>' });
+    if (state) state.textContent = `Read ${parsed.pax.length} travellers and ${parsed.hotels.length} hotel stays. Review the account and press Import.`;
+  } catch (e) {
+    if (state) state.textContent = '';
+    toast(e.message || 'Could not read this PDF voucher.', true);
+  }
+};
+ACT.bfApplyVoucher = () => {
+  const imp = UI.bfVoucherImport; if (!imp || !BF) return toast('Voucher import has expired. Upload the PDF again.', true);
+  const partyId = isStaff() ? val('bvi-party') : (BF.partyId || '');
+  if (isStaff() && !partyId) return toast('Please select the correct agent or customer account before importing.', true);
+  const keep = { id: '', force: false, confirm: BF.confirm, groupRef: null, queryId: null };
+  BF = { ...BF_DEF(), ...imp.candidate, ...keep, partyId: partyId || '' };
+  delete UI.bfVoucherImport;
+  closeModal(); bfRender(); toast('Voucher details imported. Review all fields and prices, then create the booking.');
+};
+
 ACT.bfSave = async (a, btn) => {
   const body = { ...BF, services: BF.services.map(s => ({ ...s, from: sfrom(s), to: sto(s) })) };
   busy(btn, true);
