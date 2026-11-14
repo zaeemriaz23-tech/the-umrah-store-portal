@@ -91,7 +91,7 @@ function renderNav() {
   const u = ME.user;
   $('#nav').innerHTML = `<div class="nav">${BRAND()}<nav class="links" aria-label="Main">${navItems()}<span class="sep"></span><a class="chat" href="${esc(chatHref())}" data-open-chat aria-label="Open live chat" title="Live chat" ${ME.company.whatsapp ? 'target="_blank" rel="noopener"' : ''}>${ic('chat')}</a>
     ${u ? `<span class="me-chip"><b>${esc(inits(u.name))}</b>${esc(u.name.split(' ')[0])}</span><a class="pill white" href="/app">${ic('grid')}Dashboard</a><button class="pill ghost" data-a="logout" aria-label="Sign out">${ic('logout')}</button>`
-    : `<a class="pill white" href="#/signup"><span class="ico">${ic('users', 'sm')}</span>For Travel Agents</a><button class="pill blue" data-a="login">Login</button>`}</nav>
+    : `<a class="pill white" href="#/signup"><span class="ico">${ic('users', 'sm')}</span>For Travel Agents</a><button class="pill blue" data-a="login">Agent Login</button>`}</nav>
     <button class="burger" data-a="drawer" aria-label="Menu">${ic('menu', 'lg')}</button></div>`;
 }
 function renderFoot() {
@@ -103,7 +103,7 @@ function renderFoot() {
 }
 ACTS.drawer = () => {
   const d = document.createElement('div'); d.className = 'drawer'; d.id = 'drawer';
-  d.innerHTML = `<nav>${navItems(true)}<hr style="border:0;border-top:1px solid var(--line);margin:6px 0">${ME.user ? `<a href="/app">${ic('grid')}Dashboard</a><button data-a="logout">${ic('logout')}Sign out</button>` : `<a href="#/signup">${ic('users')}For Travel Agents</a><button data-a="login" style="background:var(--blue);color:#fff;justify-content:center">Login</button>`}</nav>`;
+  d.innerHTML = `<nav>${navItems(true)}<hr style="border:0;border-top:1px solid var(--line);margin:6px 0">${ME.user ? `<a href="/app">${ic('grid')}Dashboard</a><button data-a="logout">${ic('logout')}Sign out</button>` : `<a href="#/signup">${ic('users')}For Travel Agents</a><button data-a="login" style="background:var(--blue);color:#fff;justify-content:center">Agent Login</button>`}</nav>`;
   d.addEventListener('click', e => { if (e.target === d || e.target.closest('a,button')) d.remove(); }); document.body.appendChild(d);
 };
 ACTS.contact = (a, el, e) => { e.preventDefault(); $('#contact').scrollIntoView({ behavior: 'smooth' }); };
@@ -374,7 +374,7 @@ ACTS.route = v => { const [a, b] = v.split(':'); Q.from = ap(a); Q.to = ap(b); s
 const FAQ = [['Who can see live fares?', 'Live airline fares and hotel rates are shown to approved travel agents. Apply once with your CNIC and company details and we activate your account after review.'], ['Can pilgrims book here too?', 'Yes. Browse group packages, price a trip in the calculator or send an enquiry. Our team confirms availability and the final price before you pay.'], ['How do agents pay?', 'Bookings post to your own ledger. Pay by bank transfer, JazzCash, Easypaisa or online by card and wallet through PayFast, and every payment gets a receipt.'], ['How long does approval take?', 'Most applications are reviewed within one working day once the documents are clear. You can check progress with your reference number.'], ['Where are your offices?', 'Lahore, Okara and Islamabad. Call or WhatsApp us to visit or to book remotely.']];
 function viewHome() {
   scene('hero'); document.body.dataset.page = 'home';
-  $('#view').innerHTML = `<section class="hero"><span class="eyebrow"><i></i>The wholesale Umrah platform for travel agents</span><h1>Book Umrah groups, flights and hotels with live seats</h1><p class="sub">One partner account for group packages, hotels, flights, transport and visas. Seat counts stay current, your ledger updates itself, and every voucher carries your name.</p><div id="shost" class="sbox-host"></div></section>
+  $('#view').innerHTML = `<section class="hero"><span class="eyebrow"><i></i>THE UMRAH STORE · PARTNER PLATFORM</span><h1>Everything your Umrah desk needs. In one place.</h1><p class="sub">A single partner portal for group departures, live flight search, Makkah and Madinah hotels, visas and transport — with bookings, vouchers and your agent ledger together.</p><div id="shost" class="sbox-host"></div></section>
   <section class="sec deps" id="deps" hidden></section>
   <section class="sec promos" id="promos" hidden></section>
   <section class="sec" id="routes"><h2>Popular routes from Pakistan</h2><p class="lead">Tap a route to fill the search. Live fares appear after you sign in.</p><div class="routes">${ROUTES.map(r => `<button class="route" data-a="route" data-v="${r[0]}:${r[1]}"><div><div class="cc">${r[0]} ${ic('plane', 'sm')} ${r[1]}</div><small>${APS[r[0]][0]} to ${APS[r[1]][0]}</small></div><span class="go2">${ic('arrow', 'sm')}</span></button>`).join('')}</div></section>

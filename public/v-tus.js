@@ -81,11 +81,11 @@ ACT.ssSess = async (a, btn) => { ssBusy(true, btn); try { const r = await api('/
 VIEWS.services = {
   title: 'Services & sync', roles: ['admin'], noLive: false,
   render() {
-    const z = S.seatSyncAdmin, bad = z && (z.status === 'needs_reauth');
-    const tabs = [['services', 'Services'], ['sync', 'Seat sync' + (bad ? ' !' : '')], ['brand', 'Brand filter']];
+    const z = S.seatSyncAdmin, bad = z && (z.status === 'needs_reauth'), sz = S.supplierSyncAdmin, sbad = sz && (sz.status === 'needs_reauth' || sz.status === 'error'), mon = S.maintenance && S.maintenance.on;
+    const tabs = [['services', 'Services'], ['supplier', 'Supplier sync' + (sbad ? ' !' : '')], ['maint', 'Maintenance' + (mon ? ' (ON)' : '')], ['sync', 'Legacy seat sync' + (bad ? ' !' : '')], ['brand', 'Brand filter']];
     return `<div class="ph"><div><h1>Services & sync</h1><p>Choose what is live, keep supplier seats current, and keep supplier names out of agent view</p></div></div>
     <div class="tabs">${tabs.map(([k, l]) => `<button class="${SY.tab === k ? 'on' : ''}" data-act="syTab" data-a="${k}">${l}</button>`).join('')}</div><div class="gap"></div>
-    ${SY.tab === 'sync' ? syncTab() : SY.tab === 'brand' ? brandTab() : svcTab()}`;
+    ${SY.tab === 'supplier' && window.supplierTab ? window.supplierTab() : SY.tab === 'maint' && window.maintTab ? window.maintTab() : SY.tab === 'sync' ? syncTab() : SY.tab === 'brand' ? brandTab() : svcTab()}`;
   }
 };
 ACT.syTab = k => { SY.tab = k; renderView(); };

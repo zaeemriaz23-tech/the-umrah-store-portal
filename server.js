@@ -29,6 +29,8 @@ const Mail = require('./lib/mailer');
 const Mod = require('./lib/modules');
 const Brand = require('./lib/brand');
 const Seat = require('./lib/meezab');
+const Sup = require('./lib/supplier');
+const Maint = require('./lib/maintenance');
 const F = require('./lib/files');
 const E = require('./public/engine.js');
 
@@ -52,6 +54,7 @@ app.use((req, res, next) => {
   if (s && s.exp > Date.now()) { const u = db.users.find(x => x.id === s.uid); if (u && u.active !== false && !u.suspended) req.u = u; }
   next();
 });
+app.use(Maint.guard); // maintenance mode is enforced here, on the server, for every request
 const auth = (req, res, next) => (req.u ? next() : res.status(401).json({ error: 'Login required' }));
 const perm = (...ks) => (req, res, next) => (req.u && PM.canAny(req.u, ks) ? next() : res.status(req.u ? 403 : 401).json({ error: req.u ? 'You do not have permission to do this' : 'Login required' }));
 const bucket = new Map();
@@ -88,6 +91,7 @@ app.post('/api/login', (req, res) => {
   if (!limit('login:' + req.ip, Math.max(3, +db.settings.security.loginMax || 10), 9e5)) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
   const u = db.users.find(x => x.login === String(req.body.login || '').toLowerCase().trim());
   if (!u || u.active === false || u.suspended || !check(String(req.body.password || ''), u.pw)) { const h = !u && SU.loginHint(req.body.login, req.body.password); return res.status(h ? 403 : 401).json({ error: h || 'Incorrect username or password', pendingApproval: !!h }); }
+  if (Maint.isOn() && !Maint.allows(u)) return res.status(503).json({ error: Maint.publicInfo().title + '. Only administrators can sign in right now. Please try again later.', maintenance: true });
   const sid = crypto.randomBytes(24).toString('hex');
   const sd = Math.max(1, +db.settings.security.sessionDays || 7); db.sessions[sid] = { uid: u.id, exp: Date.now() + 864e5 * sd };
   u.lastLogin = new Date().toISOString(); D.logAct(u, 'login', ''); save();
@@ -372,8 +376,8 @@ app.post('/api/ai/test', auth, perm('integrations.manage'), async (req, res) => 
 /* live departures for the public landing: seats come from the synchronised inventory; sold-out is automatic; supplier names are filtered */
 app.get('/api/public/departures', (req, res) => {
   if (!Mod.enabled('groups')) return res.json({ items: [], at: '' });
-  const t = new Date().toISOString().slice(0, 10), sync = Seat.publicStatus();
-  const items = db.groups.filter(g => g.dep >= t).sort((a, b) => (a.dep < b.dep ? -1 : 1)).slice(0, 6).map(g => ({ code: g.code || g.id, airline: g.airline, dep: g.dep, ret: g.ret, n: g.n, seats: Math.max(0, g.seats | 0), soldOut: !!(g.meezab && g.meezab.soldOut) || g.seats <= 0 }));
+  const t = new Date().toISOString().slice(0, 10), sync = Sup.takesOver() ? { enabled: true, lastOkAt: Sup.publicStatus().lastOkAt } : Seat.publicStatus();
+  const items = db.groups.map(g => require('./lib/groups').view(g, false)).filter(Boolean).filter(g => g.dep >= t).sort((a, b) => (a.dep < b.dep ? -1 : 1)).slice(0, 6).map(g => ({ code: g.code || g.id, airline: g.airline, dep: g.dep, ret: g.ret, n: g.n, seats: Math.max(0, g.seats | 0), soldOut: !!(g.meezab && g.meezab.soldOut) || g.seats <= 0 }));
   res.set('Cache-Control', 'public, max-age=30').json(Brand.cleanDeep({ items, at: sync.enabled ? sync.lastOkAt : '' }));
 });
 app.get('/api/public/banks', (req, res) => res.set('Cache-Control', 'public, max-age=30').json(R.publicBanks()));
@@ -392,6 +396,29 @@ app.post('/api/seatsync/session', auth, adminOnlyEarly, async (req, res) => {
   if (!limit('sssess:' + req.u.id, 6, 6e4)) return res.status(429).json({ error: 'Too many attempts' });
   try { PM.audit(req.u, 'integrations.changed', 'seatsync', { action: 'session_supplied' }); const r = await Seat.setSession(req.body.cookie); res.json({ ok: r.ok, error: r.error, status: Seat.publicStatus() }); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* ---------- Meezab group inventory sync (administrator): fully automatic, these endpoints only monitor and control it ---------- */
+app.get('/api/supplier/sync', auth, adminOnlyEarly, (req, res) => res.set('Cache-Control', 'no-store').json({ ...Sup.publicStatus(), history: Sup.history(80) }));
+app.get('/api/supplier/inventory', auth, adminOnlyEarly, (req, res) => res.set('Cache-Control', 'no-store').json({ items: Sup.inventory({ state: ['active', 'inactive'].includes(req.query.state) ? req.query.state : 'all', q: String(req.query.q || '').slice(0, 60) }) }));
+app.post('/api/supplier/sync/run', auth, adminOnlyEarly, async (req, res) => {
+  if (!limit('suprun:' + req.u.id, 6, 6e4)) return res.status(429).json({ error: 'Please wait a minute before syncing again' });
+  PM.audit(req.u, 'integrations.changed', 'supplier-sync', { action: 'manual_run' });
+  const r = await Sup.runSync({ by: req.u.login || req.u.id, manual: true }); res.json({ ...r, status: Sup.publicStatus() });
+});
+app.post('/api/supplier/sync/config', auth, adminOnlyEarly, (req, res) => {
+  try { Sup.saveConfig(req.body || {}); PM.audit(req.u, 'integrations.changed', 'supplier-sync', { action: 'config', enabled: req.body.enabled, intervalMin: req.body.intervalMin }); save(); res.json({ ok: true, status: Sup.publicStatus() }); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post('/api/supplier/sync/session', auth, adminOnlyEarly, async (req, res) => {
+  if (!limit('supsess:' + req.u.id, 6, 6e4)) return res.status(429).json({ error: 'Too many attempts' });
+  try { PM.audit(req.u, 'integrations.changed', 'supplier-sync', { action: 'session_supplied' }); const r = await Sup.setSession(req.body.cookie); res.json({ ok: r.ok, error: r.error || (r.entry && r.entry.error), status: Sup.publicStatus() }); } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+/* ---------- maintenance mode (administrator only; enforced by the guard above) ---------- */
+app.get('/api/public/maintenance', (req, res) => res.set('Cache-Control', 'no-store').json(Maint.publicInfo()));
+app.get('/api/admin/maintenance', auth, adminOnlyEarly, (req, res) => res.set('Cache-Control', 'no-store').json({ maintenance: Maint.get() }));
+app.post('/api/admin/maintenance', auth, adminOnlyEarly, async (req, res) => {
+  try { const m = Maint.set(req.u, req.body || {}); save(); await D.flushAsync(); res.json({ ok: true, maintenance: m }); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 /* ---------- SEO + public pages (no login) ---------- */
@@ -429,8 +456,11 @@ const shellPage = (render, rawName) => (req, res) => {
   if (!out) return res.status(503).set('Cache-Control', 'no-store').send(R.infoPage('Please try again', 'The page is not available right now.', false));
   res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', Vary: 'Accept-Encoding' }).send(out);
 };
+/* Public home and sign-in: keep the established portal experience and its existing login modal. */
 app.get(['/', '/index.html'], shellPage(SEO.portalHtml, 'portal'));
-app.get(['/app', '/app/'], shellPage(SEO.indexHtml, 'app'));
+app.get(['/login', '/login/'], (req, res) => res.redirect(302, '/?login=1'));
+app.get(['/portal', '/portal/'], shellPage((req, raw) => SEO.portalHtml(req, raw).replace(/<meta name="robots"[^>]*>/, '<meta name="robots" content="noindex,follow">'), 'portal'));
+app.get(['/app', '/app/'], shellPage((req, raw) => { const h = SEO.indexHtml(req, raw), b = Maint.bannerHtml(); return b ? h.replace(/<body[^>]*>/, m => m + b) : h; }, 'app'));
 
 /* ---------- app shell ---------- */
 app.use(express.static(PUB, { index: false, maxAge: '7d', setHeaders: (res, f) => { if (/\.(js|css|html)$/.test(f) && !/vendor/.test(f)) res.set('Cache-Control', 'no-cache'); } }));
@@ -449,7 +479,7 @@ async function startServer() {
   // Bring back any uploaded file that exists in MySQL but is missing on disk (e.g. after a redeploy), then migrate existing files once.
   try { await F.restoreMissing(); } catch (e) { console.error('File restore warning:', e.message); }
   F.backfill().catch(e => console.error('File migration warning:', e.message));
-  AI.init(); X.init(); sweep(); Seat.start();
+  AI.init(); X.init(); sweep(); Seat.start(); Sup.start();
   setInterval(() => { sweep(); Chat.sweep(); const n = db.notifs.length; X.detect(); if (db.notifs.length !== n) D.save(); }, 60000).unref();
   setInterval(() => X.fxRefresh(false).catch(() => {}), 36e5).unref();
   setTimeout(() => X.fxRefresh(false).catch(() => {}), 5000).unref();

@@ -1,3 +1,9 @@
+# 3.16.0
+- Automatic Meezab group/package inventory sync (lib/supplier.js): GroupOid/PackageCode matching, create/update/deactivate (never delete), seat safety, retries, session renewal, pagination, history. Admin: Services & sync > Supplier sync.
+- Admin-only Maintenance mode enforced server-side (lib/maintenance.js), stored in the CRM state.
+- New landing page at `/`; the agent workspace (search, sign-up, status) lives at `/portal`.
+- Additive only: no tables or records are dropped or rewritten; a pre-migration backup is taken automatically on first start.
+
 # Changelog
 
 ## 3.15.0 - simpler sidebar, dashboard quick actions, premium flight search
