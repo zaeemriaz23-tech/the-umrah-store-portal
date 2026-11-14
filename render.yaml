@@ -15,7 +15,6 @@ services:
         sync: false
       - key: PUBLIC_URL
         sync: false   # e.g. https://crm.theumrahstore.com - used for canonical URLs and sitemap
-      - key: SERPAPI_KEY
         sync: false
       - key: GROQ_API_KEY
         sync: false

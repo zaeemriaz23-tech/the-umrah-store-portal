@@ -39,7 +39,7 @@ let pass=0,fail=0;const ok=(c,m)=>{c?pass++:fail++;console.log(c?'PASS':'FAIL',m
  const OP=new C(); await OP.login('ops1','Staff#Pass1'); const so=(await OP.get('/api/state')).j; ok(so.tickets.length===0,'staff without support.view gets no tickets'); ok((await OP.rpc('replyTicket',{id:ts.id,text:'x'})).s===403,'staff without perm cannot reply'); ok(!so.notifs.items.some(n=>/ticket/i.test(n.title)),'staff without perm not notified of tickets');
  // fx
  const fx=(await AG.get('/api/fx')).j; ok(fx.configured===false&&fx.base==='PKR','fx without key reports not configured'); 
- await A.rpc('saveSettings',{serpapiKey:'dummy'}); const fx2=(await AG.get('/api/fx')).j; ok(fx2.configured===true&&typeof fx2.error==='string','fx with key attempts fetch (error expected offline): '+fx2.error.slice(0,50));
+ const fx2=(await AG.get('/api/fx')).j; ok(fx2.configured===false&&fx2.source==='Saved office rates','FX no longer depends on a third-party search API');
  ok((await new C().get('/api/fx')).s===401,'fx requires login');
  console.log(pass+' passed, '+fail+' failed'); srv.kill('SIGTERM'); process.exit(fail?1:0);
 })();

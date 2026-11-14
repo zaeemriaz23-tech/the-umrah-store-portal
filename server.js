@@ -91,7 +91,7 @@ app.post('/api/login', (req, res) => {
   if (!limit('login:' + req.ip, Math.max(3, +db.settings.security.loginMax || 10), 9e5)) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
   const u = db.users.find(x => x.login === String(req.body.login || '').toLowerCase().trim());
   if (!u || u.active === false || u.suspended || !check(String(req.body.password || ''), u.pw)) { const h = !u && SU.loginHint(req.body.login, req.body.password); return res.status(h ? 403 : 401).json({ error: h || 'Incorrect username or password', pendingApproval: !!h }); }
-  if (Maint.isOn() && !Maint.allows(u)) return res.status(503).json({ error: Maint.publicInfo().title + '. Only administrators can sign in right now. Please try again later.', maintenance: true });
+  if (Maint.isOn() && !Maint.allows(u)) return res.status(503).json({ error: Maint.publicInfo().title + '. Only administrators and internal staff can sign in right now. Please try again later.', maintenance: true });
   const sid = crypto.randomBytes(24).toString('hex');
   const sd = Math.max(1, +db.settings.security.sessionDays || 7); db.sessions[sid] = { uid: u.id, exp: Date.now() + 864e5 * sd };
   u.lastLogin = new Date().toISOString(); D.logAct(u, 'login', ''); save();
@@ -135,10 +135,11 @@ SU.mount(app, { auth, limit });
 Chat.mount(app, { auth, limit });
 app.get('/api/portal/me', (req, res) => {
   const c = db.settings.company || {}, u = req.u;
-  res.set('Cache-Control', 'no-store').json({ user: u ? { name: u.name, role: u.role, pid: u.pid || null } : null, company: { name: c.name, tagline: c.tagline, phone: c.phone, whatsapp: c.whatsapp, email: c.email, address: c.address }, logoV: db.settings.logoV || 0, search: !!I.serpKey(), pending: u && SU.canReview(u) ? SU.pendingCount() : 0 });
+  const travelportOrders = u && u.role === 'agent' ? (db.travelportOrders || []).filter(x => x.partyId == u.pid).map(({ passengers, userId, ...x }) => ({ id:x.id, locator:x.locator, kind:x.kind, from:x.from, to:x.to, departure:x.departure, returnDate:x.returnDate, paymentPkr:x.paymentPkr, status:x.status, paymentStatus:x.paymentStatus || 'Not paid', ticketStatus:x.ticketStatus || 'Not ticketed', createdAt:x.createdAt })) : [];
+  res.set('Cache-Control', 'no-store').json({ user: u ? { name: u.name, role: u.role, pid: u.pid || null } : null, company: { name: c.name, tagline: c.tagline, phone: c.phone, whatsapp: c.whatsapp, email: c.email, address: c.address }, logoV: db.settings.logoV || 0, search: !!I.travelportStatus().configured, provider: 'Travelport', pending: u && SU.canReview(u) ? SU.pendingCount() : 0, travelportOrders });
 });
 
-/* ---------- live currency rates (SerpApi Google Finance, cached 6h) ---------- */
+/* ---------- saved office exchange rates ---------- */
 app.get('/api/fx', auth, async (req, res) => { try { await X.fxRefresh(false); } catch { /* snapshot carries the error */ } res.set('Cache-Control', 'no-store').json(X.fxSnapshot()); });
 app.post('/api/fx/refresh', auth, async (req, res) => {
   if (!limit('fx:' + req.u.id, 4, 36e5)) return res.status(429).json({ error: 'Rates were refreshed a few times already. Try again in an hour.' });
@@ -240,7 +241,7 @@ app.get('/v/:token', async (req, res) => {
   res.set('Cache-Control', 'no-store').send(Brand.cleanDoc(h));
 });
 
-/* ---------- live search (SerpApi) ---------- */
+/* ---------- live search (Travelport TripServices) ---------- */
 app.get('/api/airports', (req, res) => limit('apt:' + req.ip, 240, 6e4) ? res.json(require('./lib/airports').find(req.query.q)) : res.status(429).json({ error: 'Too many requests' }));
 const dayISO = v => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
 const searchGate = kind => (req, res, next) => {
@@ -299,6 +300,47 @@ app.get('/api/search/hotels/detail', auth, searchGate('hotels'), searchRun('hote
 app.get('/api/search/flights', auth, searchGate('flights'), searchRun('flights', 'flights', flightCheck));
 app.get('/api/search/hotels', auth, searchGate('hotels'), searchRun('hotels', 'hotels', hotelCheck));
 
+
+/* ---------- Travelport live flight booking ---------- */
+app.post('/api/travelport/price', auth, searchGate('flights'), async (req, res) => {
+  try {
+    if (req.u.role !== 'agent') throw new Error('Only approved travel-agent accounts can price a live flight.');
+    const token = str(req.body.token, 100);
+    if (!token) bad('Choose a live Travelport flight first.');
+    res.set('Cache-Control', 'no-store').json(await Search.priceFlight(token, req.u));
+  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+});
+app.post('/api/travelport/hold', auth, searchGate('flights'), async (req, res) => {
+  try {
+    if (req.u.role !== 'agent') throw new Error('Only approved travel-agent accounts can reserve a live flight.');
+    const token = str(req.body.token, 100), passengers = Array.isArray(req.body.passengers) ? req.body.passengers : [];
+    if (!limit('travelport-hold:' + req.u.id, 3, 60 * 1000)) return res.status(429).json({ error: 'Please wait before creating another Travelport reservation.' });
+    if (!token) bad('Revalidate the selected fare before booking.')
+    const order = await Search.holdFlight(token, passengers, req.u);
+    res.set('Cache-Control', 'no-store').json({ order });
+  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+});
+app.post('/api/travelport/order/:id/pay', auth, async (req, res) => {
+  try {
+    const u = req.u; if (u.role !== 'agent') throw new Error('Only the booking agent can pay for this reservation.');
+    const o = (db.travelportOrders || []).find(x => x.id === req.params.id && x.partyId == u.pid);
+    if (!o) throw new Error('Travelport reservation not found in your account.');
+    if (o.paymentStatus === 'Approved') throw new Error('Payment is already received for this reservation.');
+    if (o.paymentStatus === 'Initiated' && Date.now() - new Date(o.paymentStartedAt || 0).getTime() < 10 * 60 * 1000) throw new Error('A PayFast checkout is already in progress for this reservation. Complete it or wait 10 minutes before retrying.');
+    if (!['Held - Payment Required', 'Payment Failed'].includes(o.status)) throw new Error('This reservation is not currently available for payment. Status: ' + o.status);
+    const party = D.party(u.pid);
+    const payment = await I.payfastStart(req, { partyId: u.pid, amt: o.paymentPkr, note: 'Travelport flight ' + o.locator, userName: u.name, email: party && party.email, phone: party && party.phone, travelportOrderId: o.id });
+    o.paymentStatus = 'Initiated'; o.paymentStartedAt = new Date().toISOString(); D.save();
+    res.set('Cache-Control', 'no-store').json({ payment, order: { id: o.id, locator: o.locator, paymentPkr: o.paymentPkr, status: o.status } });
+  } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+});
+app.post('/api/travelport/test', auth, perm('integrations.manage'), async (req, res) => {
+  if (!limit('travelport-test:' + req.u.id, 5, 60 * 60 * 1000)) return res.status(429).json({ error: 'Too many Travelport connection tests. Try again later.' });
+  try { const result = await Search.travelportTest(); PM.audit(req.u, 'integrations.travelport_test', 'travelport', { environment: result.environment }); save(); res.json(result); }
+  catch (e) { res.status(400).json({ ok: false, message: e.message }); }
+});
+app.get('/api/travelport/status', auth, perm('integrations.view'), (req, res) => res.json(I.travelportStatus()));
+
 /* ---------- payments: PayFast + one-link ---------- */
 app.post('/api/payfast/start', auth, async (req, res) => {
   try {
@@ -318,7 +360,7 @@ const pfDone = (req, res) => {
   if (req.method === 'POST' && req.path === '/payfast/ipn') return res.sendStatus(200);
   if (!p) return res.send(R.infoPage('Payment not found', 'We could not match this payment. If money was deducted, contact the office with your bank reference.', false));
   const ok = p.status === 'Approved', lk = p.linkId && db.paylinks.find(x => x.id === p.linkId), back = lk ? '/pay/' + lk.token : '/app';
-  res.set('Cache-Control', 'no-store').send(R.infoPage(ok ? 'Payment received' : p.status === 'Pending' ? 'Payment under review' : 'Payment not completed', ok ? 'PKR ' + p.amt.toLocaleString('en-US') + ' has been added to your account.' : p.status === 'Pending' ? 'Your payment was received and is awaiting verification by the office.' : (p.pfMsg || 'The payment was not completed. You have not been charged.'), ok || p.status === 'Pending', back));
+  res.set('Cache-Control', 'no-store').send(R.infoPage(ok ? 'Payment received' : p.status === 'Pending' ? 'Payment under review' : 'Payment not completed', ok ? (p.travelportOrderId ? 'Payment of PKR ' + p.amt.toLocaleString('en-US') + ' received for your Travelport reservation. Ticket issuance is still pending.' : 'PKR ' + p.amt.toLocaleString('en-US') + ' has been added to your account.') : p.status === 'Pending' ? 'Your payment was received and is awaiting verification by the office.' : (p.pfMsg || 'The payment was not completed. You have not been charged.'), ok || p.status === 'Pending', back));
 };
 app.get('/payfast/return', pfDone);
 app.post('/payfast/return', pfDone);
@@ -481,8 +523,6 @@ async function startServer() {
   F.backfill().catch(e => console.error('File migration warning:', e.message));
   AI.init(); X.init(); sweep(); Seat.start(); Sup.start();
   setInterval(() => { sweep(); Chat.sweep(); const n = db.notifs.length; X.detect(); if (db.notifs.length !== n) D.save(); }, 60000).unref();
-  setInterval(() => X.fxRefresh(false).catch(() => {}), 36e5).unref();
-  setTimeout(() => X.fxRefresh(false).catch(() => {}), 5000).unref();
   server = app.listen(PORT, () => {
     console.log('The Umrah Store CRM v' + require('./package.json').version + ' running on port ' + PORT);
     console.log('Data folder: ' + DATA + (/node_modules|public_html|\/app\/?$/.test(DATA) ? '  (WARNING: keep DATA_DIR outside the deployed folder or a redeploy can erase it)' : ''));

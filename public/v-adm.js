@@ -160,15 +160,16 @@ ACT.saveRules = (a, b) => {
   return saveS(b, p);
 };
 function tInt(s) {
-  const pf = s.payfast, o = location.origin;
+  const pf = s.payfast, tp = s.travelport || {}, o = location.origin;
   return `<div class="g2" style="align-items:start"><div class="g1"><div class="card cp"><div class="row sb"><div class="sec" style="margin:0">PayFast checkout</div>${S.flags.payfast ? '<span class="bdg green">Configured</span>' : '<span class="bdg gray">Not configured</span>'}</div><div class="g2" style="margin-top:12px">${fld('Merchant ID', `<input id="pf-m" value="${esc(pf.merchantId)}">`)}${fld('Merchant name', `<input id="pf-n" value="${esc(pf.merchantName)}">`)}${fld('Secured key', `<input id="pf-k" type="password" value="${esc(pf.securedKey)}" autocomplete="off">`)}${fld('Store ID (optional)', `<input id="pf-s" value="${esc(pf.storeId)}">`)}${fld('Environment', `<select id="pf-e">${opts([['sandbox', 'Sandbox / test'], ['live', 'Live']], pf.env)}</select>`)}</div><p class="hint" style="margin:10px 0">Give PayFast these URLs: success/failure → <span class="mono">${o}/payfast/return</span> · IPN/checkout → <span class="mono">${o}/payfast/ipn</span>. Online payments post to the agent's ledger automatically once PayFast confirms them.</p><div class="row" style="gap:8px"><button class="btn pri" data-act="savePf">Save PayFast</button><button class="btn" data-act="testPf">Test connection</button></div><p class="hint" id="pf-res" style="margin-top:8px"></p></div>
-  <div class="card cp"><div class="row sb"><div class="sec" style="margin:0">Live search - SerpApi</div>${S.flags.search ? '<span class="bdg green">Connected</span>' : '<span class="bdg gray">Not connected</span>'}</div>${fld('SerpApi key', `<input id="g-s" type="password" value="${esc(s.serpapiKey)}" placeholder="${s.envKeys.serp ? 'Set via server environment' : 'Paste your key'}" autocomplete="off">`)}<button class="btn" style="margin-top:10px" data-act="saveSerp">Save key</button></div>
+  <div class="card cp"><div class="row sb"><div class="sec" style="margin:0">Travelport TripServices</div>${tp.configured ? '<span class="bdg green">Credentials configured</span>' : '<span class="bdg gray">Credentials required</span>'}</div><p class="hint" style="margin:8px 0">Live flight search, fare revalidation and reservation hold use Travelport. Production access and Air / Stays entitlements must be approved by Travelport separately.</p><div class="g2"><div><small>Environment</small><b>${esc(tp.environment || 'preproduction')}</b></div><div><small>OAuth token</small><b>${tp.tokenReady ? 'Available' : 'Not requested'}</b></div></div><p class="hint">${tp.configured ? 'All required server variables are present.' : 'Missing variables: ' + esc((tp.missing || []).join(', '))}</p><p class="hint">Add credentials in Hostinger → Advanced → Environment variables. Never paste API passwords or client secrets into this CRM form or a chat.</p><div class="row" style="gap:8px;margin:8px 0"><button class="btn" data-act="testTravelport">Test Travelport OAuth</button><span class="hint" id="tp-res"></span></div><div class="hint mono">TRAVELPORT_USERNAME<br>TRAVELPORT_PASSWORD<br>TRAVELPORT_CLIENT_ID<br>TRAVELPORT_CLIENT_SECRET<br>TRAVELPORT_ACCESS_GROUP<br>TRAVELPORT_ENV=preproduction</div><p class="hint">Access group / PCC values are assigned by Travelport. Hotel search also requires Stays API provisioning. Ticket issuance requires your agency's approved airline form of payment.</p></div>
   </div></div>
+  <div class="card cp"><div class="row sb"><div class="sec" style="margin:0">Travelport reservation queue</div><span class="bdg ${((S.travelportOrders || []).length ? 'amber' : 'gray')}">${(S.travelportOrders || []).length} reservations</span></div>${(S.travelportOrders || []).length ? `<div style="overflow:auto"><table class="tbl"><thead><tr><th>PNR</th><th>Route</th><th>Agent</th><th>Amount (PKR)</th><th>Payment</th><th>Ticket</th><th>Created</th></tr></thead><tbody>${(S.travelportOrders || []).slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,30).map(x=>`<tr><td><b>${esc(x.locator || '-')}</b><div class="sub">${esc(x.id)}</div></td><td>${esc(x.from || '')} → ${esc(x.to || '')}<div class="sub">${esc(x.departure || '')}${x.returnDate ? ' / '+esc(x.returnDate) : ''}</div></td><td>${esc((S.parties || []).find(p=>p.id==x.partyId)?.name || 'Agent')}</td><td>${Number(x.paymentPkr || 0).toLocaleString('en-PK')}</td><td>${esc(x.paymentStatus || 'Not paid')}</td><td>${esc(x.ticketStatus || 'Not ticketed')}</td><td>${esc((x.createdAt || '').slice(0,16).replace('T',' '))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint" style="margin:8px 0 0">No Travelport reservations have been created yet. Agent flight holds and payment status will appear here.</p>'}</div>
   <div class="card cp" id="wa"><div class="row sb"><div class="sec" style="margin:0">WhatsApp queries</div><span id="wa-st"></span></div><p class="hint" style="margin:8px 0 12px">Link a WhatsApp number by QR. Every message sent to it creates a query automatically (messages from the same number within 30 minutes are merged).</p><div id="wa-body"><span class="spin dk"></span></div></div></div>`;
 }
+ACT.testTravelport = async (a, b) => { const o = document.getElementById('tp-res'); if (b) b.disabled = true; if (o) o.textContent = 'Testing OAuth credentials…'; try { const r = await api('/api/travelport/test', { method: 'POST', body: '{}' }); if (o) { o.textContent = r.message; o.style.color = r.ok ? 'var(--green,#067647)' : 'var(--red,#d92d20)'; } } catch (e) { if (o) { o.textContent = e.message; o.style.color = 'var(--red,#d92d20)'; } } if (b) b.disabled = false; };
 ACT.testPf = async (a, b) => { const o = document.getElementById('pf-res'); if (b) b.disabled = true; o.textContent = 'Contacting PayFast...'; try { const r = await api('/api/payfast/test', { method: 'POST', body: JSON.stringify({ merchantId: val('pf-m'), securedKey: val('pf-k'), env: val('pf-e') }) }); o.textContent = r.message; o.style.color = r.ok ? 'var(--green,#067647)' : 'var(--red,#d92d20)'; } catch (e) { o.textContent = e.message; o.style.color = 'var(--red,#d92d20)'; } if (b) b.disabled = false; };
 ACT.savePf = (a, b) => saveS(b, { payfast: { merchantId: val('pf-m'), merchantName: val('pf-n'), securedKey: val('pf-k'), storeId: val('pf-s'), env: val('pf-e') } }, 'PayFast saved');
-ACT.saveSerp = (a, b) => saveS(b, { serpapiKey: val('g-s') });
 async function waPoll() {
   const body = $('#wa-body'); if (!body) return clearInterval(waTimer);
   try {
@@ -255,3 +256,87 @@ ACT.aiSend = async () => {
 };
 ACT.aiOk = async i => { const m = CH()[i]; m.pending = false; try { const r = await api('/api/ai/run', { method: 'POST', body: JSON.stringify({ actions: m.actions.map(a => ({ op: a.op, args: a.args })) }) }); m.results = r.results; m.actions = []; await load(); } catch (e) { m.t += '\n' + e.message; } renderView(); };
 ACT.aiNo = i => { const m = CH()[i]; m.pending = false; m.actions = []; m.t += '\n(dismissed)'; renderView(); };
+
+/* ======================= ADMIN CENTRE =======================
+ * Central command view. Reads existing role-scoped state and existing health/backup APIs;
+ * no record writes occur except when an administrator explicitly creates a restore point.
+ */
+const AC = { health: null, loading: false, loadedAt: '' };
+const acCount = v => Number(v || 0).toLocaleString('en-US');
+const acTime = v => v ? new Date(v).toLocaleString() : 'Not recorded';
+const acStatus = (label, tone) => `<span class="ac-status ${tone || 'neutral'}"><i></i>${esc(label)}</span>`;
+function acHealthHtml() {
+  const h = AC.health;
+  if (AC.loading && !h) return `<div class="ac-health-skeleton"><div class="ac-skel-line wide"></div><div class="ac-skel-grid">${Array.from({length:4},()=>'<i></i>').join('')}</div><div class="ac-skel-line"></div></div>`;
+  if (!h) return `<div class="ac-health-empty"><b>System health has not been checked yet.</b><p>Refresh to read the current storage and backup status.</p></div>`;
+  const mysql = h.driver === 'mysql', health = h.driver === 'unknown' ? false : mysql ? !!h.healthy : true;
+  const rec = h.records || {}, bk = h.backups || {};
+  return `<div class="ac-health-grid">
+    <div class="ac-health-cell"><span>Storage</span><b>${esc(mysql ? 'MySQL' : (h.driver || 'Local storage'))}</b><small>${mysql ? (h.connected ? 'Database connection established' : 'Database not connected') : 'Local JSON persistence'}</small></div>
+    <div class="ac-health-cell"><span>Persistence health</span><b>${acStatus(h.driver === 'unknown' ? 'Unavailable' : mysql ? (health ? 'Healthy' : 'Needs attention') : 'Available', health ? 'good' : 'bad')}</b><small>${esc(h.error || h.note || (health ? 'No storage fault reported' : 'Check hosting database settings'))}</small></div>
+    <div class="ac-health-cell"><span>Application version</span><b>${esc(h.appVersion || '-')}</b><small>Last check ${esc(new Date().toLocaleTimeString())}</small></div>
+    <div class="ac-health-cell"><span>Restore points</span><b>${mysql ? acCount(bk.count) : '—'}</b><small>${mysql ? 'Most recent: ' + esc(acTime(bk.last)) : 'Restore points depend on storage configuration'}</small></div>
+  </div>
+  <div class="ac-records"><span><b>${acCount(rec.bookings)}</b> bookings</span><span><b>${acCount(rec.users)}</b> users</span><span><b>${acCount(rec.parties)}</b> accounts</span><span><b>${acCount(rec.payments)}</b> payments</span><span><b>${acCount(rec.ledgerEntries)}</b> ledger entries</span><span><b>${acCount(rec.vouchers)}</b> vouchers</span></div>
+  ${h.detailError ? `<div class="warnbox" style="margin-top:12px">Backup detail unavailable: ${esc(h.detailError)}</div>` : ''}${h.error && mysql ? `<div class="warnbox" style="margin-top:12px">${esc(h.error)}</div>` : ''}`;
+}
+async function acLoad(showToast) {
+  AC.loading = true; const box = $('#ac-health'); if (box) box.innerHTML = acHealthHtml();
+  try { AC.health = await api('/api/storage/status'); AC.loadedAt = new Date().toISOString(); }
+  catch (e) { AC.health = { error: e.message, driver: 'unknown', healthy: false }; if (showToast) toast('Health check failed: ' + e.message, true); }
+  AC.loading = false; const target = $('#ac-health'); if (target) target.innerHTML = acHealthHtml();
+  const stamp = $('#ac-checked'); if (stamp) stamp.textContent = AC.loadedAt ? 'Checked ' + new Date(AC.loadedAt).toLocaleTimeString() : '';
+}
+VIEWS.admin = {
+  roles: ['admin'], title: 'Admin centre',
+  render() {
+    const bookings = S.bookings || [], pays = S.payments || [], parties = S.parties || [], users = S.users || [], tickets = S.tickets || [], queries = S.queries || [];
+    const staff = users.filter(x => x.role === 'staff' || x.role === 'admin'), agents = users.filter(x => x.role === 'agent'), suppliers = users.filter(x => x.role === 'supplier');
+    const pendingBookings = bookings.filter(x => x.status === 'Pending').length, pendingPayments = pays.filter(x => x.status === 'Pending').length, pendingApps = Number(S.appsPending || 0);
+    const openTickets = tickets.filter(x => x.status === 'Open').length, openQueries = queries.filter(x => x.status === 'Open').length;
+    const activeAgents = parties.filter(x => x.kind === 'agent' && x.active !== false).length;
+    const maint = !!(S.maintenance && S.maintenance.on), sup = S.supplierSyncAdmin || {}, seat = S.seatSyncAdmin || {};
+    const syncLabel = x => !x || !x.configured ? 'Not configured' : x.status === 'ok' ? 'Healthy' : x.status === 'error' ? 'Error / retrying' : x.status === 'needs_reauth' ? 'Sign-in required' : (x.status || 'Waiting');
+    const syncTone = x => !x || !x.configured ? 'neutral' : x.status === 'ok' ? 'good' : ['error','needs_reauth'].includes(x.status) ? 'bad' : 'neutral';
+    const log = (S.log || []).slice(0, 7);
+    return `<div class="ac-page">
+      <section class="ac-hero"><div class="ac-hero-copy"><div class="ac-eyebrow">THE UMRAH STORE · CONTROL ROOM</div><h1>Admin centre</h1><p>One place to monitor operations, access, integrations and data protection.</p><div class="ac-hero-tags">${acStatus(maint ? 'Maintenance ON' : 'Portal live', maint ? 'warn' : 'good')}${acStatus(staff.length + ' internal accounts', 'neutral')}${acStatus((S.company && S.company.name) || 'The Umrah Store', 'neutral')}</div></div><div class="ac-hero-actions"><button class="btn" data-act="acRefresh">${ic('refresh','sm')}Refresh health</button><button class="btn gold" data-act="acBackup">${ic('shield','sm')}Create restore point</button></div></section>
+      <section class="ac-metrics">
+        <a class="ac-metric" href="#/bookings"><span>Bookings</span><b>${acCount(bookings.length)}</b><small>${acCount(pendingBookings)} awaiting action</small><i>${ic('briefcase')}</i></a>
+        <a class="ac-metric" href="#/payments"><span>Payments</span><b>${acCount(pays.length)}</b><small>${acCount(pendingPayments)} pending review</small><i>${ic('wallet')}</i></a>
+        <a class="ac-metric" href="#/staff"><span>Internal team</span><b>${acCount(staff.length)}</b><small>Employees and administrators</small><i>${ic('users')}</i></a>
+        <a class="ac-metric" href="#/accounts"><span>Active agents</span><b>${acCount(activeAgents)}</b><small>${acCount(agents.length)} agent logins · ${acCount(suppliers.length)} suppliers</small><i>${ic('briefcase')}</i></a>
+        <a class="ac-metric" href="#/queries"><span>Open queries</span><b>${acCount(openQueries)}</b><small>${acCount(openTickets)} open support tickets</small><i>${ic('chat')}</i></a>
+        <a class="ac-metric" href="#/applications"><span>Agent applications</span><b>${acCount(pendingApps)}</b><small>Awaiting review and approval</small><i>${ic('users')}</i></a>
+      </section>
+      <section class="ac-main-grid">
+        <div class="ac-panel"><div class="ac-panel-head"><div><span class="ac-eyebrow">LIVE OPERATIONS</span><h2>Platform status</h2></div><a href="#/services" class="lnk">Services &amp; sync</a></div>
+          <div class="ac-status-list"><div class="ac-status-row"><span class="ac-status-icon">${ic('shield')}</span><div class="ac-status-text"><b>Maintenance mode</b><small>${maint ? 'Public and agent access paused. Internal team access remains available.' : 'Public portal and agent access are enabled.'}</small></div>${acStatus(maint ? 'ON' : 'OFF', maint ? 'warn' : 'good')}<a href="#/services" data-act="acMaint" class="ac-mini-link">Manage</a></div>
+          <div class="ac-status-row"><span class="ac-status-icon">${ic('refresh')}</span><div class="ac-status-text"><b>Supplier inventory sync</b><small>Last successful: ${esc(sup.lastOkAt ? acTime(sup.lastOkAt) : 'Never')} · next run: ${esc(sup.nextAt ? acTime(sup.nextAt) : 'Not scheduled')}</small></div>${acStatus(syncLabel(sup), syncTone(sup))}<a href="#/services" data-act="acSupplier" class="ac-mini-link">Manage</a></div>
+          <div class="ac-status-row"><span class="ac-status-icon">${ic('activity')}</span><div class="ac-status-text"><b>Legacy seat sync</b><small>Last successful: ${esc(seat.lastOkAt ? acTime(seat.lastOkAt) : 'Never')}</small></div>${acStatus(syncLabel(seat), syncTone(seat))}<a href="#/services" data-act="acSeat" class="ac-mini-link">Manage</a></div></div>
+        </div>
+        <div class="ac-panel"><div class="ac-panel-head"><div><span class="ac-eyebrow">ADMIN TOOLS</span><h2>Quick access</h2></div></div>
+          <div class="ac-tools"><a href="#/staff"><i>${ic('users')}</i><span><b>Staff &amp; permissions</b><small>Roles, employee access and audit</small></span>${ic('chev')}</a><a href="#/accounts"><i>${ic('wallet')}</i><span><b>Accounts &amp; ledgers</b><small>Agent, supplier and customer statements</small></span>${ic('chev')}</a><a href="#/payments"><i>${ic('receipt')}</i><span><b>Payments &amp; receipts</b><small>Approvals, proof and payment links</small></span>${ic('chev')}</a><a href="#/rates"><i>${ic('hotel')}</i><span><b>Hotel &amp; transport inventory</b><small>Hotel photos, room rates, routes and fares</small></span>${ic('chev')}</a><a href="#/reports"><i>${ic('chart')}</i><span><b>Business reports</b><small>Profit, sales, supplier cost and expenses</small></span>${ic('chev')}</a><a href="#/settings"><i>${ic('settings')}</i><span><b>Company &amp; settings</b><small>Brand, banking and integrations</small></span>${ic('chev')}</a><a href="#/services"><i>${ic('activity')}</i><span><b>Services &amp; sync</b><small>Modules, maintenance and supplier inventory</small></span>${ic('chev')}</a><a href="#/bookings"><i>${ic('briefcase')}</i><span><b>Booking operations</b><small>Manage bookings, vouchers and status</small></span>${ic('chev')}</a><a href="#/queries"><i>${ic('chat')}</i><span><b>Queries &amp; support</b><small>Open requests and service issues</small></span>${ic('chev')}</a><a href="#/promos"><i>${ic('spark')}</i><span><b>Offers &amp; promotions</b><small>Campaigns and package promotions</small></span>${ic('chev')}</a></div>
+        </div>
+      </section>
+      <section class="ac-panel"><div class="ac-panel-head"><div><span class="ac-eyebrow">DATA PROTECTION</span><h2>Storage &amp; restore points</h2><p>Read-only health checks. Creating a restore point is an explicit action; restoring data remains a separate protected workflow.</p></div><div class="ac-head-actions"><span id="ac-checked" class="ac-muted"></span><button class="btn sm" data-act="acRefresh">${ic('refresh','sm')}Check again</button><button class="btn sm gold" data-act="acBackup">${ic('shield','sm')}Create restore point</button></div></div><div id="ac-health" class="ac-health">${acHealthHtml()}</div></section>
+      <section class="ac-panel"><div class="ac-panel-head"><div><span class="ac-eyebrow">ACCOUNTABILITY</span><h2>Recent admin activity</h2><p>Latest recorded actions from the CRM audit trail.</p></div><a href="#/staff" data-act="acAudit" class="lnk">Open audit log</a></div>
+        <div class="ac-audit">${log.length ? log.map(x => `<div class="ac-audit-row"><span class="ac-audit-dot"></span><div><b>${esc(x.a || 'Activity')}</b><small>${esc(x.u || 'System')} · ${esc(x.d || '')}</small></div><time>${esc(x.t ? new Date(x.t).toLocaleString() : '')}</time></div>`).join('') : '<div class="ac-health-empty">No recorded activity yet.</div>'}</div>
+      </section>
+    </div>`;
+  },
+  mount() { if (!AC.health || !AC.loadedAt) acLoad(false); }
+};
+ACT.acRefresh = async (a, btn) => { if (btn) btn.disabled = true; await acLoad(true); if (btn) btn.disabled = false; };
+ACT.acBackup = async (a, btn) => {
+  if (!(await confirmBox('Create restore point', 'Create a new protected restore point of the current CRM state? This does not restore, overwrite or delete any data.', 'Create restore point'))) return;
+  if (btn) btn.disabled = true;
+  try { const r = await api('/api/backups', { method: 'POST', body: JSON.stringify({ note: 'Admin centre restore point' }) }); toast('Restore point #' + r.id + ' created successfully'); await acLoad(false); }
+  catch (e) { toast('Could not create restore point: ' + e.message, true); }
+  if (btn) btn.disabled = false;
+};
+ACT.acMaint = (a, b, e) => { if (e && e.preventDefault) e.preventDefault(); ACT.syTab && ACT.syTab('maint'); go('services'); };
+ACT.acSupplier = (a, b, e) => { if (e && e.preventDefault) e.preventDefault(); ACT.syTab && ACT.syTab('supplier'); go('services'); };
+ACT.acSeat = (a, b, e) => { if (e && e.preventDefault) e.preventDefault(); ACT.syTab && ACT.syTab('sync'); go('services'); };
+ACT.acAudit = (a, b, e) => { if (e && e.preventDefault) e.preventDefault(); if (typeof SF === 'function') SF().tab = 'audit'; go('staff'); };
+

@@ -127,9 +127,13 @@
       if (/Pilgrims\s+Details/i.test(line)) { inPax = true; continue; }
       if (inPax && /\bAdults\s*:/i.test(line)) break;
       if (!inPax || /Mutamer\s+Name|Gender\s+PPNO/i.test(line)) continue;
-      const m = /^(.+?)\s+(Male|Female)\s+([A-Z0-9]{6,12})\s+(Adult|Child|Infant)\b(?:\s+(Yes|No))?/i.exec(line);
+      const m = /^(.+?)\s+(Male|Female)\s+([A-Z0-9]{6,12})\s+(Adult|Child|Infant)\b(?:\s+(Yes|No))?(?:\s+([A-Z0-9][A-Z0-9/-]*))?(?:\s+([A-Z0-9][A-Z0-9/-]*))?$/i.exec(line);
       if (!m) continue;
-      pax.push({ n: m[1].trim().replace(/\s{2,}/g, ' '), pp: m[3].toUpperCase(), dob: '', nat: 'Pakistani', g: /^Female$/i.test(m[2]) ? 'F' : 'M', t: m[4][0].toUpperCase() + m[4].slice(1).toLowerCase() });
+      const tailA = m[6] || '', tailB = m[7] || '';
+      // Common supplier vouchers place a 6-character PNR in the final column while leaving Visa Number blank.
+      const visaNo = tailB ? tailA : (tailA.length >= 8 ? tailA : '');
+      const pnr = tailB || (tailA.length > 0 && tailA.length < 8 ? tailA : '');
+      pax.push({ n: m[1].trim().replace(/\s{2,}/g, ' '), pp: m[3].toUpperCase(), dob: '', nat: 'Pakistani', g: /^Female$/i.test(m[2]) ? 'F' : 'M', t: m[4][0].toUpperCase() + m[4].slice(1).toLowerCase(), beds: !/^No$/i.test(m[5] || 'Yes'), visaNo, pnr });
     }
 
     const anchorDate = voucherDate || (now.getFullYear() + '-01-01');
@@ -147,9 +151,12 @@
       const cityMatches = [...line.matchAll(/\b(Madinah|Medinah|Makkah|Jeddah)\b/gi)];
       if (!cityMatches.length) continue;
       // Some supplier exports repeat the city in the Hotel Name column when the hotel is blank (e.g. "Makkah Makkah").
-      const cityMatch = cityMatches.length > 1 && cityMatches[0].index === 0 ? cityMatches[1] : cityMatches[0];
+      // The last city token is the City column. Hotel names can legitimately contain a city word (e.g. "Ergwan Al Madinah").
+      const cityMatch = cityMatches[cityMatches.length - 1];
       const cityRaw = cityMatch[1], city = /^medinah$/i.test(cityRaw) ? 'Madinah' : cityRaw[0].toUpperCase() + cityRaw.slice(1).toLowerCase();
-      let hotel = line.slice(0, cityMatch.index).trim();
+      let hotel = line.slice(0, cityMatch.index).trim(), confirm = '';
+      const confirmMatch = /\s+([A-Z0-9-]*\d[A-Z0-9-]*)$/.exec(hotel);
+      if (confirmMatch) { confirm = confirmMatch[1]; hotel = hotel.slice(0, confirmMatch.index).trim(); }
       if (norm(hotel) === norm(city)) hotel = '';
       const tail = line.slice(cityMatch.index + cityMatch[0].length);
       const mealMatch = /\b(RO|BB|HB|FB|EP|CP|MAP|AP)\b/i.exec(tail);
@@ -160,7 +167,7 @@
       const nightsMatch = /\s(\d{1,2})\s*$/.exec(line);
       let nights = nightsMatch ? +nightsMatch[1] : 0;
       if (!nights && cin && cout) nights = Math.max(1, Math.round((new Date(cout) - new Date(cin)) / 86400000));
-      hotels.push({ hotel, city, roomType: room, meal: meals[mealCode] || 'Room only', mealCode, cin, cout, nights, confirm: '' });
+      hotels.push({ hotel, city, roomType: room, meal: meals[mealCode] || 'Room only', mealCode, cin, cout, nights, confirm });
     }
 
     const legs = [];
@@ -180,8 +187,10 @@
       if (/Transport\s*\/\s*Services/i.test(line)) { inTransport = true; continue; }
       if (inTransport && /Departure\s+from\s+Pakistan/i.test(line)) break;
       if (!inTransport || /^Name\s+Type\s+BRN/i.test(line)) continue;
-      const m = /^(.+?)\s+(By\s+.+)$/i.exec(line);
+      const m = /^(.+?)\s+((?:(?:Economy|Business|VIP|Standard)\s+)?By\s+.+)$/i.exec(line);
       if (m) { transport = { name: m[1].trim(), type: m[2].trim() }; break; }
+      const tier = /\s+(Economy|Business|VIP|Standard)\s+(By\s+.+)$/i.exec(line);
+      if (tier) { transport = { name: line.slice(0, tier.index).trim(), type: (tier[1] + ' ' + tier[2]).trim() }; break; }
     }
     const note = pick(/Note\s*:\s*(.+?)(?:\n|$)/i);
     const adults = +(pick(/Adults\s*:\s*(\d+)/i) || 0), children = +(pick(/Childs?\s*:\s*(\d+)/i) || 0), infants = +(pick(/Infants?\s*:\s*(\d+)/i) || 0), totalBeds = +(pick(/Total\s+BEDS\s*:\s*(\d+)/i) || 0);

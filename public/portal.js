@@ -39,7 +39,7 @@ const dSub = s => { const d = parse(s); return DAY[d.getDay()] + ', ' + d.getFul
 const dShort = s => { const d = parse(s); return DAY[d.getDay()].slice(0, 3) + ', ' + d.getDate() + ' ' + MON[d.getMonth()].slice(0, 3); };
 const Q = { trip: 'oneway', from: { code: 'LHE', city: 'Lahore', name: 'Allama Iqbal Intl' }, to: { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }, date: addD(TODAY, 7), ret: '', legs: [{ from: { code: 'LHE', city: 'Lahore', name: 'Allama Iqbal Intl' }, to: { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }, date: addD(TODAY, 7) }, { from: { code: 'JED', city: 'Jeddah', name: 'King Abdulaziz Intl' }, to: { code: 'MED', city: 'Madinah', name: 'Prince Mohammad bin Abdulaziz' }, date: addD(TODAY, 10) }], ad: 1, ch: 0, inf: 0, cls: '1', direct: false, bags: 0 };
 const CABINS = [['1', 'Economy'], ['2', 'Premium Economy'], ['3', 'Business'], ['4', 'First']];
-const H = { mode: 'flights', city: 'Makkah', cin: addD(TODAY, 14), cout: addD(TODAY, 19), ad: 2, stars: '', free: false };
+const H = { mode: 'flights', city: 'Makkah', hotelName: '', cin: addD(TODAY, 14), cout: addD(TODAY, 19), ad: 2, stars: '', free: false };
 const paxN = () => Q.ad + Q.ch + Q.inf;
 const paxTxt = () => paxN() + (paxN() === 1 ? ' Traveller' : ' Travellers');
 
@@ -136,7 +136,8 @@ function hotelCard() {
   const n = Math.max(1, Math.round((parse(H.cout) - parse(H.cin)) / 864e5));
   return `<div class="sbox" id="sbox">${tabsHtml()}<form class="scard" id="sform" novalidate>
   <div class="srow1"><div class="seg"><button type="button" class="on" tabindex="-1">Stay</button></div><div class="sopt"><div class="opt"><button type="button" data-a="hstars" aria-label="Star rating">${ic('star')}<span>${H.stars ? H.stars + '+ stars' : 'Any stars'}</span></button></div></div></div>
-  <div class="srow2"><label class="f fdiv"><span class="lab">Destination</span><input class="big" id="h-city" list="h-cities" value="${esc(H.city)}" placeholder="City or hotel" autocomplete="off" aria-label="Destination"><datalist id="h-cities">${CITIES.map(c => `<option value="${c}">`).join('')}</datalist><span class="small">Makkah, Madinah, Jeddah...</span></label>
+  <div class="srow2"><label class="f fdiv"><span class="lab">Destination</span><input class="big" id="h-city" list="h-cities" value="${esc(H.city)}" placeholder="City" autocomplete="off" aria-label="Destination"><datalist id="h-cities">${CITIES.map(c => `<option value="${c}">`).join('')}</datalist><span class="small">Makkah, Madinah, Jeddah...</span></label>
+    <label class="f fdiv"><span class="lab">Hotel name <small>optional</small></span><input class="big" id="h-name" value="${esc(H.hotelName)}" placeholder="Search a specific hotel" autocomplete="off"><span class="small">Search by hotel or property name</span></label>
     <label class="f fdiv"><span class="lab">Check-in</span><input class="big" id="h-cin" type="date" min="${TODAY}" value="${H.cin}" aria-label="Check-in date"><span class="small">${dSub(H.cin)}</span></label>
     <label class="f fdiv"><span class="lab">Check-out</span><input class="big" id="h-cout" type="date" min="${addD(H.cin, 1)}" value="${H.cout}" aria-label="Check-out date"><span class="small">${n} night${n > 1 ? 's' : ''}</span></label>
     <label class="f"><span class="lab">Guests</span><select class="big" id="h-ad" aria-label="Guests">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `<option value="${k}" ${k === H.ad ? 'selected' : ''}>${k} guest${k > 1 ? 's' : ''}</option>`).join('')}</select><span class="small">Adults</span></label>
@@ -172,12 +173,13 @@ function mountSearch(host) { host.innerHTML = searchCard(); $('#sform').addEvent
 const repaint = () => { const h = $('#sbox') && $('#sbox').parentNode; if (h) { closePop(); mountSearch(h); } };
 
 ACTS.mode = v => { if (H.mode === v) return; H.mode = v; if (/^#\/(flights|hotels)/.test(location.hash)) { location.hash = '#/' + (v === 'hotels' ? 'hotels' : 'flights') + '?' + (v === 'hotels' ? hqs() : qs()); return; } repaint(); };
-const hqs = () => new URLSearchParams({ city: H.city, cin: H.cin, cout: H.cout, ad: H.ad, stars: H.stars, free: H.free ? 1 : 0 }).toString();
+const hqs = () => new URLSearchParams({ city: H.city, hotelName: H.hotelName, cin: H.cin, cout: H.cout, ad: H.ad, stars: H.stars, free: H.free ? 1 : 0 }).toString();
 function bindHotelForm() {
   const on = (id, f) => { const e = $(id); e && e.addEventListener('change', f); };
   on('#h-cin', e => { H.cin = e.target.value || H.cin; if (H.cout <= H.cin) H.cout = addD(H.cin, 1); repaint(); });
   on('#h-cout', e => { H.cout = e.target.value && e.target.value > H.cin ? e.target.value : addD(H.cin, 1); repaint(); });
   on('#h-ad', e => { H.ad = +e.target.value || 2; });
+  on('#h-name', e => { H.hotelName = String(e.target.value || '').trim(); });
   const c = $('#h-city'); c && c.addEventListener('input', () => { H.city = c.value; });
 }
 ACTS.hcity = v => { H.city = v; repaint(); };
@@ -369,6 +371,7 @@ document.addEventListener('change', e => { const t = e.target.closest('[data-a]'
 const APS = { LHE: ['Lahore', 'Allama Iqbal Intl'], KHI: ['Karachi', 'Jinnah Intl'], ISB: ['Islamabad', 'Islamabad Intl'], PEW: ['Peshawar', 'Bacha Khan Intl'], MUX: ['Multan', 'Multan Intl'], SKT: ['Sialkot', 'Sialkot Intl'], JED: ['Jeddah', 'King Abdulaziz Intl'], MED: ['Madinah', 'Prince Mohammad bin Abdulaziz'], DXB: ['Dubai', 'Dubai Intl'], RUH: ['Riyadh', 'King Khalid Intl'] };
 const ap = c => ({ code: c, city: APS[c][0], name: APS[c][1] });
 const ROUTES = [['LHE', 'JED'], ['KHI', 'JED'], ['ISB', 'JED'], ['LHE', 'MED'], ['KHI', 'MED'], ['ISB', 'MED'], ['MUX', 'JED'], ['LHE', 'DXB']];
+ACTS.tpPay = async id => { const b = document.querySelector(`[data-a=\"tpPay\"][data-v=\"${CSS.escape(id)}\"]`); if (b) { b.disabled = true; b.textContent = 'Opening…'; } try { const r = await api('/api/travelport/order/' + encodeURIComponent(id) + '/pay', { method:'POST', body:'{}' }); submitPayFastCheckout(r.payment); } catch (e) { toast(e.message, true); if (b) { b.disabled = false; b.textContent = 'Pay now'; } } };
 ACTS.route = v => { const [a, b] = v.split(':'); Q.from = ap(a); Q.to = ap(b); scrollTo({ top: 0, behavior: 'smooth' }); repaint(); setTimeout(() => { const f = $('.f[data-v=dep]'); f && f.focus({ preventScroll: true }); }, 350); };
 
 const FAQ = [['Who can see live fares?', 'Live airline fares and hotel rates are shown to approved travel agents. Apply once with your CNIC and company details and we activate your account after review.'], ['Can pilgrims book here too?', 'Yes. Browse group packages, price a trip in the calculator or send an enquiry. Our team confirms availability and the final price before you pay.'], ['How do agents pay?', 'Bookings post to your own ledger. Pay by bank transfer, JazzCash, Easypaisa or online by card and wallet through PayFast, and every payment gets a receipt.'], ['How long does approval take?', 'Most applications are reviewed within one working day once the documents are clear. You can check progress with your reference number.'], ['Where are your offices?', 'Lahore, Okara and Islamabad. Call or WhatsApp us to visit or to book remotely.']];
@@ -376,6 +379,7 @@ function viewHome() {
   scene('hero'); document.body.dataset.page = 'home';
   $('#view').innerHTML = `<section class="hero"><span class="eyebrow"><i></i>THE UMRAH STORE · PARTNER PLATFORM</span><h1>Everything your Umrah desk needs. In one place.</h1><p class="sub">A single partner portal for group departures, live flight search, Makkah and Madinah hotels, visas and transport — with bookings, vouchers and your agent ledger together.</p><div id="shost" class="sbox-host"></div></section>
   <section class="sec deps" id="deps" hidden></section>
+  <section class="sec" id="tp-orders" hidden></section>
   <section class="sec promos" id="promos" hidden></section>
   <section class="sec" id="routes"><h2>Popular routes from Pakistan</h2><p class="lead">Tap a route to fill the search. Live fares appear after you sign in.</p><div class="routes">${ROUTES.map(r => `<button class="route" data-a="route" data-v="${r[0]}:${r[1]}"><div><div class="cc">${r[0]} ${ic('plane', 'sm')} ${r[1]}</div><small>${APS[r[0]][0]} to ${APS[r[1]][0]}</small></div><span class="go2">${ic('arrow', 'sm')}</span></button>`).join('')}</div></section>
   <section class="sec"><h2>Everything an Umrah desk needs, in one account</h2><div class="feat"><div class="fc dark"><div class="ic">${ic('plane', 'lg')}</div><h3>Live airline fares</h3><p>Search real-time fares across airlines, filter by stops, departure time and flight number, and compare Best, Cheapest and Fastest side by side.</p><div class="tags"><span>One way and return</span><span>Cabin and baggage</span><span>Layover details</span><span>Fare insight</span></div></div>
@@ -387,7 +391,13 @@ function viewHome() {
   <section class="sec"><h2>Frequently asked questions</h2><div class="faqs">${FAQ.map(f => `<details><summary>${esc(f[0])}</summary><p>${esc(f[1])}</p></details>`).join('')}</div></section>
   <section class="help" aria-labelledby="helph"><div class="helpin"><div><h2 id="helph">Talk to a real person</h2><p>Our desk answers Umrah, flight, hotel and visa questions the same day.</p></div><div class="helpb"><button class="pill blue" type="button" data-open-chat>${ic('chat')}Live chat</button>${(ME.company.whatsapp || '+92 313 693 5568') ? `<a class="pill wa" href="https://wa.me/${esc(String(ME.company.whatsapp || '+92 313 693 5568').replace(/\D/g, ''))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}<a class="pill white2" href="tel:${esc(String(ME.company.phone || '+92 313 693 5568').replace(/[^\d+]/g, ''))}">Call us</a></div></div></section>
   <div class="cta"><div><h2>Ready to book with agent rates?</h2><p>Apply once with your CNIC and company details. We will email you when your account is active.</p></div><div class="acts"><a class="pill white" href="#/signup" style="height:50px">Apply as a travel agent</a>${ME.user ? '' : '<button class="pill ghost" data-a="login" style="height:50px">I already have an account</button>'}</div></div>`;
-  mountSearch($('#shost')); flyby(); loadPromos(); loadDepartures();
+  mountSearch($('#shost')); flyby(); loadPromos(); loadDepartures(); loadTravelportOrders();
+}
+async function loadTravelportOrders() {
+  const el = $('#tp-orders'); if (!el || !ME.user || ME.user.role !== 'agent') return;
+  try { const r = await api('/api/portal/me'); const rows = r.travelportOrders || []; if (!rows.length) { el.hidden = true; return; }
+    el.hidden = false; el.innerHTML = `<div class="dephead"><div><h2>My Travelport reservations</h2><p class="lead">Your supplier PNRs, payment status and ticket issuance progress.</p></div></div><div class="card cp" style="overflow:auto"><table class="tbl"><thead><tr><th>PNR</th><th>Route</th><th>Departure</th><th>Payment</th><th>Ticket</th><th></th></tr></thead><tbody>${rows.slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td><b>${esc(x.locator || '-')}</b><div class="sub">${esc(x.id)}</div></td><td>${esc(x.from || '')} → ${esc(x.to || '')}</td><td>${esc(x.departure || '-')}</td><td><b>${esc(x.paymentStatus || 'Not paid')}</b><div class="sub">PKR ${fnum(x.paymentPkr)}</div></td><td>${esc(x.ticketStatus || 'Not ticketed')}</td><td>${['Held - Payment Required','Payment Failed'].includes(x.status) ? `<button class="btn pri sm" data-a="tpPay" data-v="${esc(x.id)}">Pay now</button>` : '<span class="sub">'+(x.paymentStatus === 'Approved' ? 'Office processing' : '—')+'</span>'}</td></tr>`).join('')}</tbody></table><p class="hint" style="margin:10px 0 0">PayFast payment confirms your payment to The Umrah Store. Your airline ticket is only issued after the office completes Travelport ticketing.</p></div>`;
+  } catch { el.hidden = true; }
 }
 const FLYSVG = '<svg viewBox="0 0 120 48" aria-hidden="true"><path d="M2 26l40-4 28-18c3-2 7-2 9 0l-9 19 30 2c5 .5 8 3 8 5s-3 4.5-8 5l-30 2 9 19c-2 2-6 2-9 0L42 38 2 34c-1.500-.2-2-1-2-4s.5-3.800 2-4z" fill="#fff"/></svg>';
 function flyby() {
@@ -419,6 +429,7 @@ const hm = s => String(s || '').slice(11, 16), dOf = s => String(s || '').slice(
 const dur = m => { m = Math.round(+m || 0); return Math.floor(m / 60) + 'h ' + pad(m % 60) + 'm'; };
 const plusDays = i => Math.round((parse(dOf(i.arr)) - parse(dOf(i.dep))) / 864e5);
 const pkr = n => 'PKR ' + fnum(n);
+const money = (n, c = 'PKR') => { try { return new Intl.NumberFormat('en-PK', { style: 'currency', currency: String(c || 'PKR').toUpperCase(), maximumFractionDigits: 2 }).format(+n || 0); } catch { return String(c || 'PKR') + ' ' + fnum(n); } };
 const hue = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 window.logoFail = img => { const p = img.parentNode; p.style.background = `hsl(${p.dataset.h},55%,42%)`; p.textContent = p.dataset.i; };
 const logo = (name, url) => { const h = hue(name), ini = esc(String(name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()); return url ? `<span class="lg" data-h="${h}" data-i="${ini}"><img src="${esc(url)}" alt="" loading="lazy" onerror="logoFail(this)"></span>` : `<span class="lg" data-h="${h}" data-i="${ini}" style="background:hsl(${h},55%,42%)">${ini}</span>`; };
@@ -512,7 +523,7 @@ function card(i, all) {
   const air = i.airlines.length > 1 ? i.airlines.join(' + ') : i.airline;
   return `<article class="fcard"><div class="fmain"><div class="air">${logo(i.airline, i.logo)}<div style="min-width:0"><b>${esc(air)}</b><span>${esc(i.nos.join(' · ') || i.cls || '')}</span></div></div>
    <div class="tl"><div class="pt"><b>${hm(i.dep)}</b><span>${esc(i.from)}</span></div><div class="mid"><div class="du">${dur(i.dur)}</div><div class="line">${dots}</div><div class="stp2 ${i.stops ? 'st1' : 'ns'}">${i.stops ? i.stops + (i.stops > 1 ? ' stops' : ' stop') + (i.via ? ' · ' + esc(i.via) : '') : 'Non-stop'}</div></div><div class="pt e"><b>${hm(i.arr)}${ps > 0 ? `<sup>+${ps}</sup>` : ''}</b><span>${esc(i.to)}</span></div></div>
-   <div class="buy"><div><div class="price"><small>PKR</small>${fnum(i.price)}</div><div class="pn">${paxN() > 1 ? 'Total for ' + paxN() + ' travellers' : 'Per traveller'}${i.round ? ' · round trip' : ''}</div></div>${Q.trip === 'multi' ? `<button class="btn pri" data-a="selectLeg" data-v="${i._k}" ${R.multi && R.multi.index < R.multi.legs.length - 1 && !i.token ? 'disabled title="No continuation token available"' : ''}>Select this flight</button>` : `<button class="btn pri" data-a="req" data-v="${i._k}">Request booking</button>`}</div></div>
+   <div class="buy"><div><div class="price"><small>${esc(i.currency || 'PKR')}</small>${fnum(i.price)}</div><div class="pn">${paxN() > 1 ? 'Total for ' + paxN() + ' travellers' : 'Per traveller'}${i.round ? ' · round trip' : ''}</div></div>${Q.trip === 'multi' ? `<button class="btn pri" data-a="selectLeg" data-v="${i._k}" ${R.multi && R.multi.index < R.multi.legs.length - 1 && !i.token ? 'disabled title="No continuation token available"' : ''}>Select this flight</button>` : `<button class="btn pri" data-a="req" data-v="${i._k}">Book with Travelport</button>`}</div></div>
    ${tags.length ? `<div class="ftag">${tags.join('')}</div>` : ''}
    <div class="fbar"><button class="dt" data-a="fdet" data-v="${i._k}" aria-expanded="false"><span>Flight details</span>${ic('down', 'sm')}</button><span>${esc(i.cls || 'Economy')}${i.plane ? ' · ' + esc(i.plane) : ''}</span></div>
    <div class="fdet" id="fd-${i._k}" hidden>${i.segs.map((s, k) => `${k ? layover(i.lay[k - 1], s) : ''}<div class="seg2"><div class="tm"><b>${hm(s.dep)}</b><span>${dShort(dOf(s.dep)).replace(/^\w+, /, '')}</span></div><div class="rail"><i></i></div><div class="bd"><b>${esc(s.fromName || s.from)} (${esc(s.from)})</b><div class="ds">${logo(s.air, s.logo).replace('class="lg"', 'class="lg" style="display:inline-grid;vertical-align:middle;width:22px;height:22px;border-radius:6px;font-size:9px;color:#fff;margin-right:6px"')}${esc(s.air)} ${esc(s.no)} · ${dur(s.dur)}</div><div class="segc">${s.plane ? `<span>${ic('plane', 'sm')}${esc(s.plane)}</span>` : ''}${s.legroom ? `<span>${ic('seat', 'sm')}${esc(s.legroom)} legroom</span>` : ''}${s.night ? `<span>${ic('moon', 'sm')}Overnight</span>` : ''}</div></div></div>
@@ -543,7 +554,7 @@ function paintMain() {
     ${rows.length ? rows.map(i => card(i, flag)).join('') : `<div class="state"><div class="ic">${ic('filter', 'lg')}</div><h3>No flights match these filters</h3><p>Reset the filters to see all ${all.length} flights.</p><div class="acts"><button class="btn pri" data-a="resetF">Reset filters</button></div></div>`}`;
 }
 /* request a booking = a flight query on the agent's desk */
-const fText = i => `${i.airline} ${i.nos.join('/')} · ${i.from} ${hm(i.dep)} → ${i.to} ${hm(i.arr)} · ${i.stops ? i.stops + ' stop' : 'non-stop'} · ${Q.date}${Q.ret ? ' / return ' + Q.ret : ''} · ${paxN()} traveller${paxN() > 1 ? 's' : ''} · ${pkr(i.price)}`;
+const fText = i => `${i.airline} ${i.nos.join('/')} · ${i.from} ${hm(i.dep)} → ${i.to} ${hm(i.arr)} · ${i.stops ? i.stops + ' stop' : 'non-stop'} · ${Q.date}${Q.ret ? ' / return ' + Q.ret : ''} · ${paxN()} traveller${paxN() > 1 ? 's' : ''} · ${money(i.price, i.currency)}`;
 ACTS.reqMulti = () => {
   if (!R.multi || !R.multi.complete) return;
   const itinerary = R.multi.chosen.map((x, i) => ({ leg: i + 1, date: x.date, from: x.from, to: x.to, airline: x.airline, flightNumbers: x.nos, departure: x.dep, arrival: x.arr, displayedPrice: x.price }));
@@ -558,16 +569,47 @@ ACTS.reqMulti = () => {
   });
 };
 
-ACTS.req = v => {
-  const i = R.res.items.find(x => x._k === +v); if (!i) return;
-  const m = modal(`<div class="mhead"><div class="lk">${ic('send', 'lg')}</div><h3>Request this booking</h3><p>The desk will confirm the fare and seats, then you can book from your dashboard.</p></div><div class="mbody"><div class="trip" style="flex-wrap:wrap;text-align:center">${esc(i.airline)} ${esc(i.nos.join('/'))}<span>${esc(i.from)} ${hm(i.dep)} to ${esc(i.to)} ${hm(i.arr)} · ${pkr(i.price)}</span></div>
-    <label class="fld" style="margin-top:16px"><span>Notes for the desk <small>optional</small></span><div class="inp ta"><textarea id="rq-n" rows="3" placeholder="Passenger names, preferred time, baggage..."></textarea></div></label><button class="nx" style="width:100%" id="rq-go">Send request</button></div>`);
-  $('#rq-go', m).addEventListener('click', async ev => {
-    const b = ev.currentTarget; b.disabled = true; b.innerHTML = '<span class="spinner sm"></span>';
-    try { await api('/api/rpc', { method: 'POST', body: JSON.stringify({ op: 'addQuery', type: 'flight', source: 'portal', text: fText(i) + ($('#rq-n').value.trim() ? '\n' + $('#rq-n').value.trim() : ''), details: { kind: 'flight', airline: i.airline, fno: i.nos.join('/'), from: i.from, to: i.to, date: Q.date, ret: Q.ret || '', pax: paxN() } }) });
-      modal(`<div class="mbody" style="padding-top:36px;text-align:center"><div class="done"><div class="big">${ic('check')}</div><h3 style="font-size:23px">Request sent</h3><p style="margin:10px auto 22px">The desk has your request. You will see the quote in your queries as soon as it is ready.</p></div><a class="btn pri w" href="/app#/queries">View my queries</a><button class="btn out w" style="margin-top:10px" data-a="closeModal">Keep searching</button></div>`); }
-    catch (e) { toast(e.message, true); b.disabled = false; b.textContent = 'Send request'; }
-  });
+function submitPayFastCheckout(payment) {
+  const f = document.createElement('form'); f.method = 'POST'; f.action = payment.action; f.style.display = 'none';
+  Object.entries(payment.fields || {}).forEach(([name, value]) => { const i = document.createElement('input'); i.type = 'hidden'; i.name = name; i.value = String(value == null ? '' : value); f.appendChild(i); });
+  document.body.appendChild(f); f.submit();
+}
+function travelerTypes() { return [...Array(Q.ad).fill('ADT'), ...Array(Q.ch).fill('CNN'), ...Array(Q.inf).fill('INF')]; }
+ACTS.req = async v => {
+  const i = R.res && R.res.items.find(x => x._k === +v); if (!i) return;
+  if (Q.trip === 'multi') return toast('Multi-city reservations are not enabled in this Travelport release. Search a one-way or return itinerary.', true);
+  if (!ME.user || ME.user.role !== 'agent') return toast('Sign in with an approved travel-agent account to book live fares.', true);
+  const m = modal(`<div class="mhead"><div class="lk">${ic('plane','lg')}</div><h3>Recheck live Travelport fare</h3><p>Confirm the supplier price before entering passenger details.</p></div><div class="mbody"><div class="loadbar"><span class="spinner dk"></span><b>Revalidating price and availability…</b></div></div>`, true);
+  try {
+    const price = await api('/api/travelport/price', { method: 'POST', body: JSON.stringify({ token: i.token }) });
+    if (!price.configured) throw new Error('Travelport API credentials are not configured on the server.');
+    const types = travelerTypes();
+    const fields = types.map((ptc, k) => `<div class="card cp" style="margin:12px 0"><b>Traveller ${k + 1} · ${ptc === 'ADT' ? 'Adult' : ptc === 'CNN' ? 'Child' : 'Infant'}</b><div class="g2" style="margin-top:10px">
+      <label class="fld"><span>First / given name</span><div class="inp"><input data-p="firstName" data-i="${k}" required maxlength="60" autocomplete="off"></div></label>
+      <label class="fld"><span>Last / surname</span><div class="inp"><input data-p="lastName" data-i="${k}" required maxlength="60" autocomplete="off"></div></label>
+      <label class="fld"><span>Date of birth</span><div class="inp"><input data-p="birthDate" data-i="${k}" type="date" required></div></label>
+      <label class="fld"><span>Gender</span><div class="inp"><select data-p="gender" data-i="${k}" required><option value="">Select</option><option>Male</option><option>Female</option></select></div></label>
+      <label class="fld"><span>Passport number</span><div class="inp"><input data-p="passport" data-i="${k}" required maxlength="30" autocomplete="off"></div></label>
+      <label class="fld"><span>Passport expiry</span><div class="inp"><input data-p="passportExpiry" data-i="${k}" type="date" required></div></label>
+      <label class="fld"><span>Passport issuing country (2-letter code)</span><div class="inp"><input data-p="passportIssueCountry" data-i="${k}" value="PK" required maxlength="2"></div></label>
+    </div></div>`).join('');
+    const box = m.querySelector('.modal');
+    box.innerHTML = `<button class="x" data-a="closeModal" aria-label="Close">${ic('x')}</button><div class="mhead"><div class="lk">${ic('shield','lg')}</div><h3>Passenger details</h3><p>Enter each name exactly as printed on the passport. Travelport will recheck this offer before reserving it.</p></div><div class="mbody"><div class="trip" style="flex-wrap:wrap;text-align:center">${esc(i.airline)} · ${esc(i.nos.join('/'))}<span>${esc(i.from)} ${hm(i.dep)} → ${esc(i.to)} ${hm(i.arr)}</span><b>Confirmed fare: ${money(price.sellTotal, price.currency)}</b><span>Payable through PayFast: ${money(price.paymentPkr,'PKR')}</span></div><form id="tp-pax-form" novalidate>${fields}<label class="fld"><span>Contact email</span><div class="inp"><input id="tp-email" type="email" maxlength="120" value="${esc(ME.user.login || '')}"></div></label><label class="fld"><span>Contact phone</span><div class="inp"><input id="tp-phone" maxlength="40"></div></label><p class="hint">Creating this reservation holds the Travelport fare. Payment is collected in PKR. A payment confirmation does not by itself mean the airline ticket has been issued.</p><button class="nx" style="width:100%" type="submit" id="tp-hold">Create reservation & continue</button><div class="formerr" id="tp-err" role="alert"></div></form></div>`;
+    $('#tp-pax-form', box).addEventListener('submit', async ev => {
+      ev.preventDefault(); const b = $('#tp-hold', box), er = $('#tp-err', box); er.classList.remove('on');
+      const passengers = types.map((ptc, k) => { const p = { ptc }; box.querySelectorAll(`[data-i="${k}"][data-p]`).forEach(x => p[x.dataset.p] = x.value.trim()); p.email = $('#tp-email', box).value.trim(); p.phone = $('#tp-phone', box).value.trim(); return p; });
+      if (passengers.some(p => !p.firstName || !p.lastName || !p.birthDate || !p.gender || !p.passport || !p.passportExpiry || !p.passportIssueCountry)) { er.textContent = 'Complete all required passport and traveller fields.'; er.classList.add('on'); return; }
+      b.disabled = true; b.innerHTML = '<span class="spinner sm"></span> Reserving with Travelport…';
+      try {
+        const held = await api('/api/travelport/hold', { method: 'POST', body: JSON.stringify({ token: price.token, passengers }) });
+        const order = held.order;
+        box.innerHTML = `<button class="x" data-a="closeModal" aria-label="Close">${ic('x')}</button><div class="mhead"><div class="lk">${ic('check','lg')}</div><h3>Travelport reservation created</h3><p>Your booking has a supplier locator. Payment is required before the office can proceed with ticket issuance.</p></div><div class="mbody"><div class="trip" style="flex-wrap:wrap;text-align:center"><b>Locator: ${esc(order.locator)}</b><span>Reservation: ${esc(order.id)}</span><b>Payable now: ${money(order.paymentPkr,'PKR')}</b><span>Supplier status: ${esc(order.status)}</span></div><button class="nx" style="width:100%" id="tp-pay">Pay securely with PayFast</button><p class="hint" id="tp-pay-note">This will open the PayFast hosted checkout. Your reservation is not ticketed until ticket issuance is completed.</p></div>`;
+        $('#tp-pay', box).addEventListener('click', async ev2 => { const payBtn = ev2.currentTarget; payBtn.disabled = true; payBtn.innerHTML = '<span class="spinner sm"></span> Connecting to PayFast…'; try { const r = await api('/api/travelport/order/' + encodeURIComponent(order.id) + '/pay', { method: 'POST', body: JSON.stringify({}) }); submitPayFastCheckout(r.payment); } catch (e) { const note = $('#tp-pay-note', box); if (note) note.textContent = e.message + ' Your reservation locator is ' + order.locator + '. You can retry payment from your agent account or contact the office.'; payBtn.disabled = false; payBtn.textContent = 'Retry PayFast payment'; } });
+      } catch (e) { er.textContent = e.message; er.classList.add('on'); b.disabled = false; b.textContent = 'Create reservation & continue'; }
+    });
+  } catch (e) {
+    const box = m.querySelector('.modal'); if (box) box.innerHTML = `<button class="x" data-a="closeModal">${ic('x')}</button><div class="mhead"><div class="lk">${ic('alert','lg')}</div><h3>Travelport could not revalidate this fare</h3><p>${esc(e.message)}</p></div><div class="mbody"><button class="btn pri w" data-a="closeModal">Close and search again</button></div>`;
+  }
 };
 
 
@@ -575,14 +617,14 @@ ACTS.req = v => {
    HOTEL RESULTS
    ===================================================================== */
 const HR = { res: null, loading: false, err: null, sort: 'price', stars: 0, free: false, tok: 0 };
-function readHq(s) { const p = new URLSearchParams(s); if (!p.get('city') || !p.get('cin') || !p.get('cout')) return false; H.city = p.get('city'); H.cin = p.get('cin'); H.cout = p.get('cout'); H.ad = Math.max(1, +p.get('ad') || 2); H.stars = p.get('stars') || ''; H.free = p.get('free') === '1'; return true; }
+function readHq(s) { const p = new URLSearchParams(s); if (!p.get('city') || !p.get('cin') || !p.get('cout')) return false; H.city = p.get('city'); H.hotelName = p.get('hotelName') || ''; H.cin = p.get('cin'); H.cout = p.get('cout'); H.ad = Math.max(1, +p.get('ad') || 2); H.stars = p.get('stars') || ''; H.free = p.get('free') === '1'; return true; }
 async function viewHotels(qstr) {
   if (!readHq(qstr)) { location.hash = '#/'; return; }
   H.mode = 'hotels'; scene('short'); document.body.dataset.page = 'flights';
   $('#view').innerHTML = `<div class="rhead"><div id="shost"></div></div><div class="rpage one"><section id="rmain"></section></div>`; mountSearch($('#shost'));
   if (!ME.user) { $('#rmain').innerHTML = `<div class="state"><div class="ic">${ic('lock', 'lg')}</div><h3>Sign in to see live hotel rates</h3><p>Hotel rates are available to approved travel agents. Sign in, or apply for a partner account.</p><div class="acts"><button class="btn pri" data-a="hgate">Sign in</button><a class="btn out" href="#/signup">Apply as a travel agent</a></div></div>`; openLogin({ hotel: true, then: () => route() }); return; }
   HR.res = null; HR.err = null; HR.loading = true; HR.stars = +H.stars || 0; HR.free = H.free; HR.sort = 'price'; const tok = ++HR.tok; paintHotels();
-  try { const p = new URLSearchParams({ city: H.city, cin: H.cin, cout: H.cout, adults: H.ad }); if (H.stars) p.set('stars', H.stars === '5' ? '5' : '3,4,5'.split(',').filter(x => +x >= +H.stars).join(',')); if (H.free) p.set('free', '1');
+  try { const p = new URLSearchParams({ city: H.city, hotelName: H.hotelName, cin: H.cin, cout: H.cout, adults: H.ad }); if (H.stars) p.set('stars', H.stars === '5' ? '5' : '3,4,5'.split(',').filter(x => +x >= +H.stars).join(',')); if (H.free) p.set('free', '1');
     const r = await api('/api/search/hotels?' + p); if (tok !== HR.tok) return; r.items = (r.items || []).map((x, k) => ({ ...x, _k: k })); HR.res = r; }
   catch (e) { if (tok !== HR.tok) return; if (e.status === 401) { ME.user = null; renderNav(); return route(); } HR.err = e; }
   HR.loading = false; paintHotels();
@@ -595,7 +637,7 @@ function hotelCardHtml(h) {
   return `<article class="hcard"><div class="himg">${h.img ? `<img src="${esc(h.img)}" alt="${esc(h.name)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}${h.deal ? `<span class="deal">${esc(h.deal)}</span>` : ''}</div>
   <div class="hbody"><div class="htop"><div><h3>${esc(h.name)}</h3><div class="hmeta">${h.stars ? `<span class="stars" aria-label="${h.stars} stars">${'&#9733;'.repeat(h.stars)}</span>` : ''}<span>${esc(h.type === 'vacation rental' ? 'Apartment' : 'Hotel')}</span></div></div>${h.rating ? `<div class="score"><b>${h.rating.toFixed(1)}</b><span>${rl}${h.reviews ? '<br>' + fnum(h.reviews) + ' reviews' : ''}</span></div>` : ''}</div>
   ${near ? `<div class="hnear">${near}</div>` : ''}<div class="htags">${h.free ? `<span class="tg g">${ic('shield', 'sm')}Free cancellation</span>` : ''}${(h.amenities || []).slice(0, 4).map(a => `<span class="tg">${esc(a)}</span>`).join('')}</div>
-  <div class="hbuy"><div><div class="price"><small>PKR</small>${fnum(h.price)}</div><div class="pn">per night · ${fnum(tot)} total for ${n} night${n > 1 ? 's' : ''}</div></div><button class="btn pri" data-a="hreq" data-v="${h._k}">Request quote</button></div></div></article>`;
+  <div class="hbuy"><div><div class="price"><small>${esc(h.currency || 'SAR')}</small>${fnum(h.price)}</div><div class="pn">per night · ${money(tot, h.currency)} total for ${n} night${n > 1 ? 's' : ''}</div></div><button class="btn pri" data-a="hreq" data-v="${h._k}">Request quote</button></div></div></article>`;
 }
 function paintHotels() {
   const m = $('#rmain'); if (!m) return; const n = nightsN();
@@ -614,7 +656,7 @@ ACTS.hsort = v => { HR.sort = v; paintHotels(); };
 ACTS.hstarf = v => { HR.stars = +v; paintHotels(); };
 ACTS.hfreef = () => { HR.free = !HR.free; paintHotels(); };
 ACTS.hclear = () => { HR.stars = 0; HR.free = false; paintHotels(); };
-const hotelSummary = h => `${h.name} (${h.stars || '?'}★) · ${H.city} · ${H.cin} → ${H.cout} · ${H.ad} guest${H.ad > 1 ? 's' : ''}${h ? ' · ' + pkr(h.price) + ' per night' : ''}`;
+const hotelSummary = h => `${h.name} (${h.stars || '?'}★) · ${H.city} · ${H.cin} → ${H.cout} · ${H.ad} guest${H.ad > 1 ? 's' : ''}${h ? ' · ' + money(h.price, h.currency) + ' per night' : ''}`;
 async function sendHotelQuery(h, note, b) {
   try { await api('/api/rpc', { method: 'POST', body: JSON.stringify({ op: 'addQuery', type: 'hotel', source: 'portal', text: (h ? hotelSummary(h) : `Hotel in ${H.city} · ${H.cin} → ${H.cout} · ${H.ad} guests`) + (note ? '\n' + note : ''), details: { kind: 'hotel', hotel: h ? h.name : '', city: H.city, cin: H.cin, cout: H.cout, pax: H.ad } }) });
     modal(`<div class="mbody" style="padding-top:36px;text-align:center"><div class="done"><div class="big">${ic('check')}</div><h3 style="font-size:23px">Request sent</h3><p style="margin:10px auto 22px">The desk has your request and will reply with a quote.</p></div><a class="btn pri w" href="/app#/queries">View my queries</a><button class="btn out w" style="margin-top:10px" data-a="closeModal">Keep searching</button></div>`); }
@@ -622,7 +664,7 @@ async function sendHotelQuery(h, note, b) {
 }
 ACTS.hreq = v => {
   const h = HR.res.items.find(x => x._k === +v); if (!h) return;
-  const m = modal(`<div class="mhead"><div class="lk">${ic('send', 'lg')}</div><h3>Request this hotel</h3><p>The desk will confirm availability and the final price.</p></div><div class="mbody"><div class="trip" style="flex-wrap:wrap;text-align:center">${esc(h.name)}<span>${dShort(H.cin)} to ${dShort(H.cout)} · ${pkr(h.price)} / night</span></div><label class="fld" style="margin-top:16px"><span>Notes for the desk <small>optional</small></span><div class="inp ta"><textarea id="rq-n" rows="3" placeholder="Rooms, bed type, guest names..."></textarea></div></label><button class="nx" style="width:100%" id="rq-go">Send request</button></div>`);
+  const m = modal(`<div class="mhead"><div class="lk">${ic('send', 'lg')}</div><h3>Request this hotel</h3><p>The desk will confirm availability and the final price.</p></div><div class="mbody"><div class="trip" style="flex-wrap:wrap;text-align:center">${esc(h.name)}<span>${dShort(H.cin)} to ${dShort(H.cout)} · ${money(h.price, h.currency)} / night</span></div><label class="fld" style="margin-top:16px"><span>Notes for the desk <small>optional</small></span><div class="inp ta"><textarea id="rq-n" rows="3" placeholder="Rooms, bed type, guest names..."></textarea></div></label><button class="nx" style="width:100%" id="rq-go">Send request</button></div>`);
   $('#rq-go', m).addEventListener('click', ev => { const b = ev.currentTarget; b.disabled = true; b.innerHTML = '<span class="spinner sm"></span>'; sendHotelQuery(h, $('#rq-n').value.trim(), b); });
 };
 ACTS.hdesk = () => { const b = document.createElement('button'); sendHotelQuery(null, '', b); };

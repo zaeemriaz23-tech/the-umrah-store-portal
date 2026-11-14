@@ -1,5 +1,5 @@
 'use strict';
-/* Group packages, permission-aware AI tools, Groq model fallback and live search (flights / hotels) against local mocks. Run: node scripts/ai-groups-test.js */
+/* Group packages and permission-aware AI tools against a local Groq mock. Run: node scripts/ai-groups-test.js */
 const { spawn } = require('child_process'); const http = require('http'); const fs = require('fs'); const os = require('os'); const path = require('path');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crm3-')), PORT = 3900 + Math.floor(Math.random() * 90), B = 'http://127.0.0.1:' + PORT;
 let pass = 0, failN = 0; const ok = (c, m) => { if (c) { pass++; console.log('  PASS', m); } else { failN++; console.log('  FAIL', m); } };
@@ -16,36 +16,13 @@ const groq = http.createServer((req, res) => { let b = ''; req.on('data', d => b
 }); });
 const call = (name, args, id = 'c1') => ({ choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] });
 const say = t => ({ choices: [{ finish_reason: 'stop', message: { content: t } }] });
-/* ---- mock SerpApi ---- */
-let serpSeen = [];
-let flightSeen = [];
-const leg = (id, to, no, air, dep, arr) => ({ departure_airport: { id, name: id + ' Airport', time: dep }, arrival_airport: { id: to, name: to + ' Airport', time: arr }, duration: 215, airline: air, airline_logo: '', flight_number: no, airplane: 'Boeing 777', travel_class: 'Economy', legroom: '31 in' });
-const serp = http.createServer((req, res) => { const u = new URL(req.url, 'http://x'), p = Object.fromEntries(u.searchParams); serpSeen.push(p); res.setHeader('content-type', 'application/json');
-  // The application refreshes FX rates 5 seconds after startup. Return a valid
-  // Google Finance response so those background calls do not pollute flight assertions.
-  if (p.engine === 'google_finance') {
-    const code = String(p.q || '').split('-')[0];
-    const rates = { USD: 280, SAR: 74, AED: 76, GBP: 360, EUR: 305 };
-    return res.end(JSON.stringify({ summary: { extracted_price: rates[code] || 1, stock: code } }));
-  }
-  if (p.engine === 'google_flights') {
-    flightSeen.push(p);
-    if (p.type === '3' && p.departure_token) return res.end(JSON.stringify({ best_flights: [{ flights: [leg('JED', 'MED', 'SV 741', 'Saudia', '2026-12-15 02:00', '2026-12-15 04:00')], total_duration: 120, price: 52000, booking_token: 'multi-booking-final' }] }));
-    if (p.type === '3') return res.end(JSON.stringify({ best_flights: [{ flights: [leg('LHE', 'JED', 'SV 739', 'Saudia', '2026-12-10 03:15', '2026-12-10 06:30')], total_duration: 215, price: 100000, departure_token: 'multi-token-1', layovers: [] }] }));
-    if (p.departure_token) return res.end(JSON.stringify({ best_flights: [{ flights: [leg('JED', 'LHE', 'SV 740', 'Saudia', '2026-12-20 02:00', '2026-12-20 09:00')], total_duration: 215, price: 150000, booking_token: 'bk1' }] }));
-    return res.end(JSON.stringify({ price_insights: { lowest_price: 100000, price_level: 'low', typical_price_range: [110000, 140000] }, best_flights: [{ flights: [leg('LHE', 'JED', 'SV 739', 'Saudia', '2026-12-10 03:15', '2026-12-10 06:30')], total_duration: 215, price: 100000, departure_token: 'dep-token-1', layovers: [] }], other_flights: [{ flights: [leg('LHE', 'DXB', 'EK 623', 'Emirates', '2026-12-10 04:00', '2026-12-10 06:00'), leg('DXB', 'JED', 'EK 801', 'Emirates', '2026-12-10 08:00', '2026-12-10 10:30')], layovers: [{ id: 'DXB', name: 'Dubai', duration: 120 }], total_duration: 420, price: 90000, departure_token: 'dep-token-2' }] }));
-  }
-  if (p.property_token) return res.end(JSON.stringify({ name: 'Mock Haram Hotel', type: 'hotel', address: 'Makkah', description: 'Close to Haram', extracted_hotel_class: 5, overall_rating: 4.5, reviews: 900, images: [{ thumbnail: 'https://x/1.jpg' }], amenities: ['Free Wi-Fi'], nearby_places: [{ name: 'Masjid al-Haram', transportations: [{ type: 'Walking', duration: '4 min' }] }], featured_prices: [{ source: 'Mock Hotel Direct', official: true, link: 'https://x/direct', rate_per_night: { extracted_lowest: 40000 }, total_rate: { extracted_lowest: 200000 }, rooms: [{ name: 'Quad room', num_guests: 4, rate_per_night: { extracted_lowest: 40000 }, total_rate: { extracted_lowest: 200000 } }] }], prices: [{ source: 'Some OTA', rate_per_night: { extracted_lowest: 42000 }, total_rate: { extracted_lowest: 210000 }, link: 'https://x/ota' }] }));
-  if (p.next_page_token) return res.end(JSON.stringify({ properties: [{ name: 'Page Two Hotel', property_token: 'tk3', extracted_hotel_class: 3, overall_rating: 4.0, reviews: 10, rate_per_night: { extracted_lowest: 15000 }, total_rate: { extracted_lowest: 75000 } }], serpapi_pagination: {} }));
-  res.end(JSON.stringify({ properties: [{ name: 'Mock Haram Hotel', property_token: 'tk1', extracted_hotel_class: 5, overall_rating: 4.5, reviews: 900, rate_per_night: { extracted_lowest: 40000 }, total_rate: { extracted_lowest: 200000 }, link: 'https://x/direct', nearby_places: [{ name: 'Masjid al-Haram', transportations: [{ type: 'Walking', duration: '4 min' }] }], images: [{ thumbnail: 'https://x/1.jpg' }], amenities: ['Free Wi-Fi'], extensions: ['Free cancellation'] }, { name: 'Budget Stay', property_token: 'tk2', extracted_hotel_class: 3, overall_rating: 3.8, reviews: 50, rate_per_night: { extracted_lowest: 12000 }, total_rate: { extracted_lowest: 60000 } }], serpapi_pagination: { next_page_token: 'PAGE2' } }));
-});
 class C { constructor() { this.c = ''; }
   async req(m, u, b) { const r = await fetch(B + u, { method: m, headers: { 'content-type': 'application/json', cookie: this.c }, body: b ? JSON.stringify(b) : undefined }); const sc = r.headers.get('set-cookie'); if (sc) this.c = sc.split(';')[0]; const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t; } return { s: r.status, j }; }
   login(l, p) { return this.req('POST', '/api/login', { login: l, password: p }); } rpc(op, p) { return this.req('POST', '/api/rpc', { op, ...p }); } get(u) { return this.req('GET', u); } post(u, b) { return this.req('POST', u, b); } }
 const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: iso(40), return_date: iso(50), seats: 40, outbound: { flight_number: 'SV 739', from: 'LHE', to: 'JED', departs: '03:15', arrives: '06:30', baggage_kg: 30 }, return_flight: { flight_number: 'SV 740', from: 'JED', to: 'LHE', departs: '02:00', arrives: '09:00', baggage_kg: 30 }, packages: [{ makkah_hotel: 'Hilton Makkah', makkah_nights: 5, makkah_distance: '300 m', madinah_hotel: 'Anwar Madinah', madinah_nights: 5, sharing: 250000, quad: 270000, triple: 290000, double: 320000 }], ...o });
 (async () => {
-  await new Promise(r => groq.listen(0, r)); await new Promise(r => serp.listen(0, r));
+  await new Promise(r => groq.listen(0, r));
   /* a database written by the previous version: stale default model + a role that could import/edit/remove groups */
   fs.mkdirSync(dir, { recursive: true });
   // A v3 database fixture must have every required core collection. The storage
@@ -60,7 +37,7 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
     roles: [{ id: 'r9', name: 'Old Group Role', desc: '', perms: ['groups.view', 'groups.edit'], active: true }],
     departments: []
   }));
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR: dir, ADMIN_PASSWORD: 'AdminPass#1', GROQ_BASE_URL: 'http://127.0.0.1:' + groq.address().port, SERPAPI_BASE_URL: 'http://127.0.0.1:' + serp.address().port + '/search.json', SERPAPI_KEY: 'serp_test' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR: dir, ADMIN_PASSWORD: 'AdminPass#1', GROQ_BASE_URL: 'http://127.0.0.1:' + groq.address().port,  }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise(r => srv.stdout.on('data', d => /running/.test(String(d)) && r()));
   const A = new C(); await A.login('admin', 'AdminPass#1');
 
@@ -143,48 +120,8 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
   const dg = await A.rpc('delGroup', { id: 'UG-9001' }); ok(bk.s !== 200 || (dg.s === 400 && dg.j.needForce), 'a group with active bookings needs an explicit "remove anyway"');
   ok((await A.rpc('delGroup', { id: 'UG-9001', force: true })).s === 200, 'forced removal works');
 
-  console.log('Live search');
-  const AG = new C(); await A.rpc('saveParty', { kind: 'agent', name: 'Search Agent', login: 'searchagent', password: 'AgentPass#12' }); await AG.login('searchagent', 'AgentPass#12');
-  await A.rpc('saveSettings', { markupPct: 10 });
-  // Freeze dates once. Recomputing relative dates several times during a long
-  // test can cross midnight and make a correct request appear incorrect.
-  const departureDate = iso(30), returnDate = iso(40);
-  const fq = '/api/search/flights?from=lhe&to=jed&date=' + departureDate + '&ret=' + returnDate + '&adults=2&cls=1';
-  const flightStart = flightSeen.length;
-  let f = await AG.get(fq); ok(f.s === 200 && f.j.configured && f.j.items.length === 2 && f.j.round, 'agent: round-trip outbound search works');
-  ok(f.j.items.every(i => !('base' in i) && !('baseTotal' in i)) && !f.j.staff, 'agent never receives supplier prices');
-  ok(f.j.items.find(i => i.nos[0] === 'SV 739').price === 110000 && f.j.insight.lowest === 110000, 'markup (10%) is applied to fares and the price insight');
-  const sf = await A.get(fq); ok(sf.j.staff && sf.j.items.find(i => i.nos[0] === 'SV 739').base === 100000 && sf.j.items[0].token === 'dep-token-1', 'staff searching AFTER an agent still get supplier cost (cache is not mutated)');
-  // FX requests are tracked separately. Check the outbound request generated by this test.
-  const outboundParams = flightSeen.slice(flightStart).find(p => p.departure_id === 'LHE' && p.arrival_id === 'JED' && p.outbound_date === departureDate);
-  const outboundParamsOk = !!outboundParams && outboundParams.return_date === returnDate && String(outboundParams.type) === '1' && String(outboundParams.adults) === '2' && outboundParams.currency === 'PKR';
-  ok(outboundParamsOk, 'SerpApi receives the right round-trip parameters' + (outboundParamsOk ? '' : ' (captured flight requests: ' + JSON.stringify(flightSeen.slice(flightStart)) + ')'));
-  const ret = await AG.get('/api/search/flights/return?from=LHE&to=JED&date=' + departureDate + '&ret=' + returnDate + '&token=dep-token-1'); ok(ret.s === 200 && ret.j.items[0].nos[0] === 'SV 740' && ret.j.items[0].price === 165000 && flightSeen[flightSeen.length - 1].departure_token === 'dep-token-1', 'return step sends the departure token and returns total trip fares');
-  const multiLegs = [{ from: 'LHE', to: 'JED', date: departureDate }, { from: 'JED', to: 'MED', date: iso(35) }], multiEncoded = encodeURIComponent(JSON.stringify(multiLegs));
-  const multi = await AG.get('/api/search/flights/multi?legs=' + multiEncoded + '&adults=2&cls=3');
-  const multiParams = flightSeen[flightSeen.length - 1]; let multiJson = []; try { multiJson = JSON.parse(multiParams.multi_city_json || '[]'); } catch {}
-  ok(multi.s === 200 && multi.j.multi && multi.j.items[0].token === 'multi-token-1', 'multi-city first-leg search returns real flight options and a continuation token');
-  ok(multiParams.type === '3' && multiParams.travel_class === '3' && multiJson.length === 2 && multiJson[0].departure_id === 'LHE' && multiJson[1].arrival_id === 'MED' && !('outbound_date' in multiParams) && !('return_date' in multiParams), 'SerpApi receives type=3 and a correctly encoded multi-city itinerary without one-way/return date parameters');
-  const multiNext = await AG.get('/api/search/flights/multi/next?legs=' + multiEncoded + '&token=multi-token-1&adults=2&cls=3');
-  ok(multiNext.s === 200 && multiNext.j.multi && multiNext.j.items[0].nos[0] === 'SV 741' && flightSeen[flightSeen.length - 1].departure_token === 'multi-token-1', 'multi-city next-leg search sends the selected departure token');
-  const invalidMulti = await AG.get('/api/search/flights/multi?legs=' + encodeURIComponent(JSON.stringify([{ from: 'LHE', to: 'JED', date: departureDate }]))) .then(x => x.s === 400);
-  const reversedMulti = await AG.get('/api/search/flights/multi?legs=' + encodeURIComponent(JSON.stringify([{ from: 'LHE', to: 'JED', date: iso(35) }, { from: 'JED', to: 'MED', date: departureDate }]))) .then(x => x.s === 400);
-  ok(invalidMulti && reversedMulti, 'invalid segment counts and out-of-order travel dates are rejected before calling the provider');
-  ok((await AG.get('/api/search/flights?from=LHE&to=LHE&date=' + departureDate)).s === 400 && (await AG.get('/api/search/flights?from=LHE&to=JED&date=' + iso(-2))).s === 400 && (await AG.get('/api/search/flights/return?from=LHE&to=JED&date=' + departureDate)).s === 400, 'invalid flight searches are refused before any credit is used');
-  const n1 = serpSeen.length; await AG.get(fq); ok(serpSeen.length === n1, 'repeat searches are served from the 10-minute cache');
-  const hq = '/api/search/hotels?city=Makkah&cin=' + iso(30) + '&cout=' + iso(35) + '&adults=4&rooms=2&stars=4,5';
-  let h = await AG.get(hq); ok(h.s === 200 && h.j.items.length === 2 && h.j.next === 'PAGE2' && h.j.rooms === 2, 'hotel search returns results, rooms and a next-page token');
-  const hs = serpSeen[serpSeen.length - 1]; ok(hs.adults === '2' && hs.hotel_class === '4,5' && hs.check_in_date === iso(30), '4 adults in 2 rooms are searched as 2 adults per room');
-  const top = h.j.items.find(i => i.name === 'Mock Haram Hotel'); ok(top.price === 44000 && top.holy && top.holy.mins === 4 && top.free && !('base' in top) && !('link' in top), 'hotel: markup, walking minutes to the Haram, free cancellation; no cost or supplier link for agents');
-  const h2 = await AG.get(hq + '&page=PAGE2'); ok(h2.j.items[0].name === 'Page Two Hotel' && serpSeen[serpSeen.length - 1].next_page_token === 'PAGE2', 'load more uses the page token');
-  const hd = await AG.get('/api/search/hotels/detail?city=Makkah&cin=' + iso(30) + '&cout=' + iso(35) + '&adults=4&rooms=2&token=tk1'); ok(hd.s === 200 && hd.j.offers.length === 2 && hd.j.offers[0].rooms[0].name === 'Quad room' && hd.j.offers[0].rooms[0].price === 44000, 'hotel details: rooms and rates with markup');
-  ok(!JSON.stringify(hd.j).includes('Some OTA') && !JSON.stringify(hd.j).includes('x/ota') && hd.j.offers[1].source === 'Rate option 2' && hd.j.offers[0].source === 'Hotel direct', 'agents do not see third-party provider names or links');
-  const hds = await A.get('/api/search/hotels/detail?city=Makkah&cin=' + iso(30) + '&cout=' + iso(35) + '&adults=4&rooms=2&token=tk1'); ok(hds.j.offers.some(o => o.source === 'Some OTA' && o.link) && hds.j.offers[0].rooms[0].base === 40000, 'staff see providers, links and cost');
-  ok((await AG.get('/api/search/hotels?city=Makkah&cin=' + iso(30) + '&cout=' + iso(29))).s === 400 && (await AG.get('/api/search/hotels?cin=' + iso(30) + '&cout=' + iso(31))).s === 400, 'invalid hotel searches are refused');
-  const SUP = new C(); const sp = (await A.rpc('saveParty', { kind: 'supplier', name: 'Sup', login: 'suppl', password: 'SupPass#1234' })).j; await SUP.login('suppl', 'SupPass#1234'); ok((await SUP.get(fq)).s === 403, 'suppliers cannot search');
-  const noSearch = await mkStaff('nosearch', ['dashboard.view', 'bookings.view']); ok((await noSearch.c.get(fq)).s === 403 && (await noSearch.c.get(hq)).s === 403, 'staff without search permissions are refused');
-  ok((await new C().get(fq)).s === 401, 'sign-in is required');
+  console.log('Live Travelport search remains disabled until credentials and account entitlements are provisioned.');
 
-  srv.kill('SIGTERM'); groq.close(); serp.close();
+  srv.kill('SIGTERM'); groq.close();
   console.log('\n' + pass + ' passed, ' + failN + ' failed'); process.exit(failN ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

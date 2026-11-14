@@ -6,6 +6,7 @@ Object.assign(process.env, { DATA_DIR: dir, CRM_TEST_MODE: '1', ADMIN_PASSWORD: 
 let pass = 0, bad = 0; const ok = (c, m) => { if (c) { pass++; console.log('  PASS', m); } else { bad++; console.log('  FAIL', m); } };
 const D = require('../lib/db'), { db } = D;
 db.parties.push({ id: 7001, kind: 'agent', name: 'Maint Agent', active: true }); db.users.push({ id: 'u7001', role: 'agent', pid: 7001, name: 'Agent One', login: 'agent@x.pk', pw: D.hash('Passw0rd1'), active: true });
+db.users.push({ id: 'u7002', role: 'staff', name: 'Staff One', login: 'staff@x.pk', pw: D.hash('StaffPass123'), active: true, title: 'Operations' });
 db.bookings.push({ id: 'b9', no: 'TUS-ZZZZ-9999', partyId: 7001, status: 'Confirmed', pax: [], services: [], from: '2030-01-01', to: '2030-01-10' });
 D.save(); D.flush();
 const counts = () => JSON.stringify({ u: db.users.length, p: db.parties.length, b: db.bookings });
@@ -27,18 +28,20 @@ const login = async (l, pw) => { const r = await call('/api/login', { method: 'P
     r = await call('/api/admin/maintenance', { method: 'POST', body: JSON.stringify({ on: true }) }); ok(r.s === 401, 'an anonymous visitor cannot change maintenance mode');
 
     console.log('Maintenance ON');
-    r = await call('/api/admin/maintenance', { method: 'POST', body: JSON.stringify({ on: true, title: 'Upgrading', message: 'Back soon', eta: 'Tonight' }) }, ad.c); ok(r.s === 200 && r.j.maintenance.on === true, 'admin switches it on');
+    r = await call('/api/admin/maintenance', { method: 'POST', body: JSON.stringify({ on: true, title: 'Upgrading', message: 'Back soon', eta: 'Tonight', allowStaff: false }) }, ad.c); ok(r.s === 200 && r.j.maintenance.on === true && r.j.maintenance.allowStaff === true, 'admin switches it on and internal staff access remains enabled');
     r = await call('/'); ok(r.s === 503 && /Upgrading/.test(r.t) && r.h.get('retry-after') && /noindex/.test(r.h.get('x-robots-tag') || ''), 'landing shows the maintenance page (503, Retry-After, noindex)');
     for (const p of ['/umrah-group-packages', '/bank-accounts', '/portal', '/contact']) { r = await call(p); ok(r.s === 503 || r.s === 404, p + ' is not available to visitors (' + r.s + ')'); }
     r = await call('/api/public/signup', { method: 'POST', body: JSON.stringify({ first: 'A', last: 'B', email: 'new@x.pk' }) }); ok(r.s === 503 && r.j.maintenance, 'new sign-ups are blocked server-side');
     r = await call('/api/public/lead', { method: 'POST', body: JSON.stringify({}) }); ok(r.s === 503, 'public enquiries are blocked');
     r = await call('/api/public/departures'); ok(r.s === 503, 'public inventory API is blocked');
     r = await login('agent@x.pk', 'Passw0rd1'); ok(r.s === 503, 'agents cannot sign in');
+    const st = await login('staff@x.pk', 'StaffPass123'); ok(st.s === 200 && st.c, 'internal staff can sign in during maintenance even when legacy allowStaff is false');
+    r = await call('/api/state', {}, st.c); ok(r.s === 200 && r.j.user && r.j.user.role === 'staff', 'internal staff retain authenticated portal access during maintenance');
     r = await call('/api/state', {}, ag.c); ok(r.s === 200 && r.j.user === null && r.j.maintenance.on === true, 'an existing agent session is treated as anonymous (no data returned)');
     r = await call('/api/rpc', { method: 'POST', body: JSON.stringify({ op: 'saveBooking' }) }, ag.c); ok(r.s === 503, 'an existing agent session cannot write');
     r = await call('/api/public/maintenance'); ok(r.s === 200 && r.j.on === true, 'public status endpoint reports it');
     r = await call('/payfast/ipn', { method: 'POST', body: '{}' }); ok(r.s !== 503, 'payment-gateway callbacks are not blocked');
-    r = await call('/app'); ok(r.s === 200 && /Only administrators can sign in/.test(r.t), 'sign-in page stays reachable, with a notice');
+    r = await call('/app'); ok(r.s === 200 && /Only administrators and internal staff can sign in/.test(r.t), 'sign-in page stays reachable, with a notice');
     r = await call('/home.css'); ok(r.s === 200, 'homepage stylesheet still loads');
     r = await call('/api/state', {}, ad.c); ok(r.s === 200 && r.j.user && r.j.user.role === 'admin' && r.j.maintenance.on === true, 'admin keeps full access with a live session');
     const ad2 = await login('admin', 'AdminPass123'); ok(ad2.s === 200, 'admin can still sign in while maintenance is on (never locked out)');

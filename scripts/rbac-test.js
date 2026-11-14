@@ -38,7 +38,7 @@ class C { constructor() { this.c = ''; }
   ok((await ops.c.rpc('setStatus', { id: bk.id, status: 'Confirmed' })).s === 403, 'operations executive: cannot approve');
   ok((await ops.c.rpc('addPayment', { partyId: ag, amt: 100 })).s === 403, 'operations: cannot record payment');
   ok((await ops.c.rpc('saveSettings', { company: { name: 'Hacked' } })).s === 403, 'operations: cannot change settings');
-  ok((await ops.c.rpc('saveSettings', { serpapiKey: 'x' })).s === 403, 'operations: cannot change integrations');
+  ok((await ops.c.rpc('saveSettings', { markupPct: 999 })).s === 403, 'operations: cannot change integrations');
   ok((await ops.c.get('/api/backup')).s === 403, 'operations: backup blocked');
   ok((await ops.c.get('/api/audit')).s === 403, 'operations: audit log blocked');
   ok((await ops.c.get('/api/search/flights?from=KHI&to=JED&date=2030-01-01')).s === 403, 'operations: flight search blocked');

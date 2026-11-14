@@ -70,19 +70,19 @@
   window.maintTab = function () {
     const m = S.maintenance; if (!m || m.on === undefined) return empty('shield', 'Not available', 'Only administrators can change maintenance mode.');
     return `<div class="card cp"><div class="row sb" style="flex-wrap:wrap;gap:14px;align-items:center"><div><h3 style="margin:0">Maintenance mode is <span class="bdg ${m.on ? 'red' : 'green'}">${m.on ? 'ON' : 'OFF'}</span></h3>
-      <div class="sub" style="margin-top:6px">${m.on ? 'Visitors see the maintenance page, sign-ups are blocked and agents cannot sign in' + (m.since ? ' (since ' + esc(new Date(m.since).toLocaleString()) + (m.by ? ' by ' + esc(m.by) : '') + ')' : '') + '.' : 'The portal is open to everyone.'}</div></div>
+      <div class="sub" style="margin-top:6px">${m.on ? 'Visitors and agent/supplier accounts are blocked; administrators and internal staff retain access' + (m.since ? ' (since ' + esc(new Date(m.since).toLocaleString()) + (m.by ? ' by ' + esc(m.by) : '') + ')' : '') + '.' : 'The portal is open to everyone.'}</div></div>
       <button class="btn ${m.on ? 'pri' : ''}" data-act="mtToggle" data-a="${m.on ? 'off' : 'on'}">${m.on ? 'Turn maintenance OFF' : 'Turn maintenance ON'}</button></div></div>
     <div class="gap"></div><div class="card cp"><div class="ch"><h3>What visitors see</h3><a class="btn sm" href="/?preview=maintenance" target="_blank" rel="noopener">${ic('eye', 'sm')}Preview page</a></div>
       <div class="g1" style="display:grid;gap:12px">${fld('Headline', `<input id="mtTitle" maxlength="90" placeholder="We are upgrading the platform" value="${esc(m.title || '')}">`)}${fld('Message', `<textarea id="mtMsg" rows="3" maxlength="500" placeholder="The portal is briefly offline while we make improvements...">${esc(m.message || '')}</textarea>`)}${fld('Expected back (optional)', `<input id="mtEta" maxlength="60" placeholder="e.g. Today, 6:00 PM PKT" value="${esc(m.eta || '')}">`)}
-      <label class="chk"><input type="checkbox" id="mtStaff" ${m.allowStaff ? 'checked' : ''}> Let staff accounts keep working (administrators always can)</label></div>
+      <div class="okbox">Administrators and internal staff can always sign in and continue their permitted work during maintenance. Agent and supplier access, public pages, new applications and enquiries are paused.</div></div>
       <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn" data-act="mtSave">${ic('check', 'sm')}Save message</button></div>
-      <div class="hint" style="margin-top:10px">Enforced on the server. While it is on: public pages show the maintenance page, new applications and enquiries are refused, and agents are signed out of the API. Administrators are never locked out, payment-gateway callbacks keep working, and no account, booking, payment or ledger is touched. Turning it off restores everything instantly.</div></div>`;
+      <div class="hint" style="margin-top:10px">Enforced on the server. While it is on: public pages show the maintenance page, new applications and enquiries are refused, and agents are signed out of the API. Administrators and internal staff are never locked out; payment-gateway callbacks keep working, and no account, booking, payment or ledger is touched. Turning it off restores everything instantly.</div></div>`;
   };
-  const mtBody = () => ({ title: val('mtTitle'), message: val('mtMsg'), eta: val('mtEta'), allowStaff: document.getElementById('mtStaff').checked });
+  const mtBody = () => ({ title: val('mtTitle'), message: val('mtMsg'), eta: val('mtEta') });
   ACT.mtSave = async (a, btn) => { busy(true, btn); try { await post('/api/admin/maintenance', mtBody()); toast('Maintenance message saved'); await refresh(); } catch (e) { toast(e.message, true); } busy(false, btn); };
   ACT.mtToggle = async (mode, btn) => {
     const on = mode === 'on';
-    if (on && !confirm('Turn maintenance mode ON?\n\nVisitors will see the maintenance page and agents will not be able to sign in. Administrators keep full access.')) return;
+    if (on && !confirm('Turn maintenance mode ON?\n\nVisitors and agent/supplier accounts will be blocked. Administrators and internal staff keep their existing permitted access.')) return;
     busy(true, btn);
     try { await post('/api/admin/maintenance', { ...mtBody(), on }); toast('Maintenance mode is now ' + (on ? 'ON' : 'OFF')); await refresh(); } catch (e) { toast(e.message, true); }
     busy(false, btn);

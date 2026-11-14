@@ -5,7 +5,7 @@ let HE = null; // hotel being edited
 const stars = n => '★'.repeat(n || 0);
 function hotelRowHtml(h) {
   const rates = sum(h.rooms, r => r.rates.length), from = Math.min(...h.rooms.flatMap(r => r.rates.map(x => x.amt)).concat([Infinity]));
-  return `<div class="card cp irow ${h.active === false ? 'off' : ''}"><div class="grow"><b>${esc(h.name)}</b> <span class="sub">${stars(h.stars)} ${esc(h.area || '')} ${h.dist ? '· ' + esc(h.dist) : ''}</span><div class="sub">${h.rooms.length} room type(s) · ${rates} rate(s)${isFinite(from) ? ' · from SAR ' + fnum(from) + '/night' : ' · <span class="neg">no rates yet - hidden from calculator</span>'}${h.active === false ? ' · inactive' : ''}</div></div><button class="btn sm" data-act="hEdit" data-a="${h.id}">${ic('edit', 'sm')}Edit</button><button class="btn sm ghost" data-act="hDel" data-a="${h.id}" aria-label="Delete">${ic('trash', 'sm')}</button></div>`;
+  return `<div class="card cp irow hotel-admin-row ${h.active === false ? 'off' : ''}">${h.img ? `<img class="hotel-admin-thumb" src="${esc(h.img)}" alt="${esc(h.name)}" loading="lazy" onerror="this.style.display='none'">` : `<div class="hotel-admin-thumb hotel-admin-placeholder">${ic('hotel', 'lg')}</div>`}<div class="grow"><b>${esc(h.name)}</b> <span class="sub">${stars(h.stars)} ${esc(h.area || '')} ${h.dist ? '· ' + esc(h.dist) : ''}</span><div class="sub">${h.rooms.length} room type(s) · ${rates} rate(s)${isFinite(from) ? ' · from SAR ' + fnum(from) + '/night' : ' · <span class="neg">no rates yet - hidden from calculator</span>'}${h.active === false ? ' · inactive' : ''}</div></div><button class="btn sm" data-act="hEdit" data-a="${h.id}">${ic('edit', 'sm')}Edit</button><button class="btn sm ghost" data-act="hDel" data-a="${h.id}" aria-label="Delete">${ic('trash', 'sm')}</button></div>`;
 }
 function tabHotels() {
   const I = inv();
@@ -15,6 +15,7 @@ function hEditorBody() {
   const h = HE;
   return `<div class="g3">${fld('Hotel name', `<input value="${esc(h.name)}" data-inp="heF" data-k="name">`)}${fld('City', `<select data-chg="heF" data-k="city">${opts([['MAKKAH', 'Makkah'], ['MADINAH', 'Madinah']], h.city)}</select>`)}${fld('Stars', `<select data-chg="heF" data-k="stars">${opts([0, 1, 2, 3, 4, 5], h.stars)}</select>`)}</div>
   <div class="g3" style="margin-top:10px">${fld('Area', `<input value="${esc(h.area)}" data-inp="heF" data-k="area" placeholder="e.g. Ajyad">`)}${fld('Distance to Haram', `<input value="${esc(h.dist)}" data-inp="heF" data-k="dist" placeholder="e.g. 250 m">`)}<label class="chk" style="align-self:end;height:40px"><input type="checkbox" ${h.active !== false ? 'checked' : ''} data-chg="heF" data-k="active">Active</label></div>
+  <div class="hotel-image-editor"><div><b>Hotel photography</b><small>Add a real hotel image by URL or upload a compressed JPG / PNG / WebP. The image is used on live hotel results and in booking selection.</small><input value="${esc(h.img || '')}" data-inp="heF" data-k="img" placeholder="https://... hotel image URL"></div><div class="hotel-image-preview" id="he-img-preview">${h.img ? `<img src="${esc(h.img)}" alt="Hotel preview" onerror="this.replaceWith(document.createTextNode('Image preview unavailable'))">` : `<span>${ic('image', 'lg')}<small>Image preview</small></span>`}</div><label class="btn sm">${ic('upload', 'sm')}Upload photo<input type="file" accept="image/jpeg,image/png,image/webp" class="hide" data-chg="heImg"></label></div>
   <div class="sec" style="margin-top:16px">Room types and nightly rates (SAR)</div>
   ${h.rooms.map((r, i) => `<div class="card cp" style="margin-bottom:10px;background:var(--bg)"><div class="g3" style="align-items:end">${fld('Room name', `<input value="${esc(r.name)}" data-inp="heR" data-i="${i}" data-k="name" placeholder="e.g. Quad Haram view">`)}${fld('Sleeps / charged', `<select data-chg="heR" data-i="${i}" data-k="occ">${opts(Engine.OCC.map(o => [o.v, o.label]), r.occ)}</select>`)}<button class="btn sm ghost" data-act="heRmRoom" data-a="${i}">${ic('trash', 'sm')}Remove room</button></div>
   <table class="t" style="margin-top:8px"><thead><tr><th>Label</th><th>From</th><th>To</th><th>SAR / night</th><th></th></tr></thead><tbody>${r.rates.map((x, j) => `<tr><td><input value="${esc(x.label)}" data-inp="heX" data-i="${i}" data-j="${j}" data-k="label" placeholder="Standard / Ramadan"></td><td><input type="date" value="${esc(x.start)}" data-inp="heX" data-i="${i}" data-j="${j}" data-k="start"></td><td><input type="date" value="${esc(x.end)}" data-inp="heX" data-i="${i}" data-j="${j}" data-k="end"></td><td><input type="number" min="0" value="${x.amt || ''}" data-inp="heX" data-i="${i}" data-j="${j}" data-k="amt"></td><td><button class="btn sm ghost" data-act="heRmRate" data-a="${i}|${j}">${ic('x', 'sm')}</button></td></tr>`).join('')}</tbody></table>
@@ -23,10 +24,26 @@ function hEditorBody() {
 }
 const heRedraw = () => { const b = $('#modal .mb'); if (b) { const y = b.scrollTop; b.innerHTML = hEditorBody(); b.scrollTop = y; } };
 const heOpen = () => openModal({ title: HE.id ? 'Edit hotel' : 'Add hotel', wide: true, body: hEditorBody(), foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn pri" data-act="heSave">Save hotel</button>' });
-ACT.hNew = c => { HE = { id: '', city: c, name: '', stars: 4, area: '', dist: '', active: true, order: 0, rooms: [{ id: '', name: '', occ: 'QUAD', rates: [{ id: '', label: '', start: '', end: '', amt: 0 }] }] }; heOpen(); };
+ACT.hNew = c => { HE = { id: '', city: c, name: '', stars: 4, area: '', dist: '', img: '', active: true, order: 0, rooms: [{ id: '', name: '', occ: 'QUAD', rates: [{ id: '', label: '', start: '', end: '', amt: 0 }] }] }; heOpen(); };
 ACT.hEdit = id => { HE = JSON.parse(JSON.stringify(inv().hotels.find(h => h.id === id))); heOpen(); };
 ACT.hDel = async id => { if (await confirmBox('Delete hotel', 'Delete this hotel and all its rates?', 'Delete', true)) doRpc(null, 'delHotel', { id }, 'Hotel deleted'); };
-INP.heF = (v, t) => { HE[t.dataset.k] = v; }; CHG.heF = (v, t) => { HE[t.dataset.k] = t.dataset.k === 'stars' ? +v : v; };
+INP.heF = (v, t) => { HE[t.dataset.k] = v; if (t.dataset.k === 'img') { const p = $('#he-img-preview'); if (p) p.innerHTML = v ? `<img src="${esc(v)}" alt="Hotel preview" onerror="this.replaceWith(document.createTextNode('Image preview unavailable'))">` : '<span>Image preview</span>'; } };
+CHG.heF = (v, t) => { HE[t.dataset.k] = t.dataset.k === 'stars' ? +v : v; };
+CHG.heImg = async (v, t) => {
+  const f = t.files && t.files[0]; if (!f || !HE) return;
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { t.value = ''; return toast('Choose a JPG, PNG or WebP hotel image.', true); }
+  try {
+    let data = await readFile(f);
+    if (typeof createImageBitmap === 'function') {
+      const bmp = await createImageBitmap(f), scale = Math.min(1, 1280 / Math.max(bmp.width, bmp.height)), canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bmp.width * scale)); canvas.height = Math.max(1, Math.round(bmp.height * scale));
+      canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height); bmp.close && bmp.close();
+      data = canvas.toDataURL('image/jpeg', .78);
+    }
+    if (data.length > 390000) throw new Error('Image is still too large after compression. Use a smaller image or paste a hosted image URL.');
+    HE.img = data; const p = $('#he-img-preview'); if (p) p.innerHTML = `<img src="${data}" alt="Hotel preview">`; toast('Hotel photo added. Save the hotel to keep it.');
+  } catch (e) { toast(e.message || 'Could not process image.', true); } finally { t.value = ''; }
+};
 INP.heR = (v, t) => { HE.rooms[t.dataset.i][t.dataset.k] = v; }; CHG.heR = (v, t) => { HE.rooms[t.dataset.i][t.dataset.k] = v; };
 INP.heX = (v, t) => { HE.rooms[t.dataset.i].rates[t.dataset.j][t.dataset.k] = t.dataset.k === 'amt' ? +v || 0 : v; };
 ACT.heAddRoom = () => { HE.rooms.push({ id: '', name: '', occ: 'QUAD', rates: [{ id: '', label: '', start: '', end: '', amt: 0 }] }); heRedraw(); };

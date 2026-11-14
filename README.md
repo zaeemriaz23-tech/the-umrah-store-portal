@@ -29,14 +29,14 @@ Existing v2 databases are migrated automatically (agents, suppliers, payments, j
 * **Payments**: PayFast online checkout, one-link payment page (`/pay/<token>`, PayFast or bank transfer + receipt upload), manual records with receipt, bank details + QR, approval queue, printable receipts.
 * **Queries**: from agents, search results or WhatsApp. Auto-rejected if unanswered (flight 2h, hotel 6h, visa 24h, transport 12h, package/other 24h - editable). Staff reply with quote; agent accepts; staff convert to booking.
 * **Group packages**: import the supplier PDF (parsed in the browser, preview before publishing). Package disappears automatically after its departure date.
-* **Search**: live flights and hotels through SerpApi with airline / flight-number / stops / star filters and markup. Without a key it shows a setup message, never sample results.
+* **Search**: live flights and hotel search through Travelport TripServices, with markup. Without Travelport credentials it shows a setup message, never sample results.
 * **Reports**: sales, cost, profit, margin, expenses, by category / agent / service / supplier, CSV export.
 * **AI assistant** (admin, Groq): answers questions about everything in the CRM and can only **add or remove** records; every change is proposed and needs your confirmation. See v3.3.
 
 ## Integrations - set up in Settings
 * **PayFast (APPS Pakistan)**: merchant ID + secured key, environment sandbox/live. Give PayFast: success/failure URL `https://YOUR-DOMAIN/payfast/return`, IPN URL `https://YOUR-DOMAIN/payfast/ipn`. Set *Public address* in Settings to your domain.
   A payment is auto-approved only when the PayFast signature matches; otherwise it waits for manual review.
-* **SerpApi**: key in Settings or `SERPAPI_KEY`.
+* **Travelport TripServices**: server-only OAuth credentials and assigned access group in Hostinger environment variables.
 * **WhatsApp**: Settings > Integrations > Link WhatsApp, scan the QR. Uses the unofficial WhatsApp Web protocol (Baileys): fine for small inbound query capture, but WhatsApp may restrict numbers - use a dedicated number.
 
 ## Notes
@@ -62,7 +62,7 @@ Tests: `node scripts/engine-check.js`
 * **Flight search rebuilt**: airport autocomplete (built-in directory, no extra API), Return/One way, Direct only, travellers & cabin popover (adults/children/infants), popular-route chips, Best/Cheapest/Fastest tabs with live prices, price-insight badge, filters (stops, departure time, max price, airlines, flight number), expandable segment details with layovers, aircraft, legroom and CO2, loading skeletons.
 * **Hotel search rebuilt**: photo gallery cards, guest rating label, nearby places (e.g. distance to Haram), free-cancellation, deal badge, star / rating / price filters, sort by price / rating / reviews.
 * **Logo**: sidebar logo reduced from ~175px tall to a compact 46px mark + name; login and voucher logos reduced.
-* SerpApi results now carry richer data (`lib/integrations.js`); airport lookup at `/api/airports`.
+* Travelport results carry live supplier offers; airport lookup at `/api/airports`.
 
 
 ## v3.2 - Staff accounts, roles & permissions
@@ -84,7 +84,7 @@ Known limits: no record-level restrictions (e.g. "only assigned agents") yet; ex
 * **Bank accounts page** (`#/banking`, agents and staff): every active bank account, mobile wallet (JazzCash/Easypaisa) and Raast ID as a card with copy buttons, QR, and *I paid this account*, *Copy details*, *WhatsApp share*. Agents also see their outstanding / available credit / awaiting approval.
 * **Public bank page** `/bank-accounts` (no login, `noindex`) plus `/api/public/banks`. Shown on the sign-in page too. Per account switch *Show on the public bank page*, and a global switch in Settings > Payments.
 * **Add payment record in one tap**: amount (quick-amount chips) -> tap the account you paid -> attach receipt photo -> save. Date, method, booking and note are under *More details*. The payment remembers which bank it went to.
-* **Settings rebuilt** into tabs: Company & logo (+WhatsApp, NTN, licence no.), Banking & QR (type, colour, branch, IBAN, SWIFT, wallet, Raast, currency, instruction, active/public, QR, reorder, live preview), **Payments** (minimum, require receipt/reference, auto-approve agent receipts up to X, switch agent records off, methods, quick amounts, note), Bookings & pricing, **AI assistant**, Integrations (PayFast, SerpApi, WhatsApp), **General & security** (public address, time zone, session days, minimum password length, login attempts), Team, Data & activity.
+* **Settings rebuilt** into tabs: Company & logo (+WhatsApp, NTN, licence no.), Banking & QR (type, colour, branch, IBAN, SWIFT, wallet, Raast, currency, instruction, active/public, QR, reorder, live preview), **Payments** (minimum, require receipt/reference, auto-approve agent receipts up to X, switch agent records off, methods, quick amounts, note), Bookings & pricing, **AI assistant**, Integrations (PayFast, Travelport, WhatsApp), **General & security** (public address, time zone, session days, minimum password length, login attempts), Team, Data & activity.
 * New permission `settings.payments`. Tests: `npm test` now also runs `scripts/bank-ai-test.js` (uses a local mock of the Groq API).
 
 ## v3.4 - what's new
@@ -92,7 +92,7 @@ Known limits: no record-level restrictions (e.g. "only assigned agents") yet; ex
 * **Real notifications** (bell, top right): booking submitted / approved / cancelled, service confirmed by supplier, new service assigned (supplier), payment pending / received / rejected, new query / quote / auto-rejection / 30-minute deadline warning, support tickets (new, reply, assigned, overdue). Stored per user with read state, filtered by role and permission, toast + tab-title count + optional desktop alerts. Generated by diffing state on every save, so PayFast IPN, payment links, the SLA sweep and the AI assistant all notify too.
 * **Global search** (top bar, press `/` or Ctrl/Cmd+K): bookings (no., passport, traveller, confirmation no.), vouchers, queries, accounts, payments, tickets, group packages and pages, grouped, keyboard navigable, role-scoped.
 * **Balance chip**: agent = available balance, supplier = balance due to you, staff = total receivable. Click opens the ledger.
-* **Currency switcher** PKR / USD / SAR / AED / GBP / EUR: live rates from **SerpApi Google Finance** (same key as flights & hotels, Settings > Integrations or `SERPAPI_KEY`), cached 6 h (~5 credits per refresh), manual Refresh button. Currencies with no rate stay disabled - no made-up numbers. If SerpApi lacks SAR the rate from Rates & inventory is used and labelled "manual". Display only: everything is stored and paid in PKR.
+* **Currency switcher** PKR / USD / SAR / AED / GBP / EUR: saved office exchange rates and manual SAR/PKR rate management; no external search provider is used for currency conversion. Currencies with no rate stay disabled - no made-up numbers. SAR conversion uses the manually maintained office rate. Display only: everything is stored and paid in PKR.
 * **Bookings**: KPI tiles (pending, departing in 7 days, in country, services to confirm, value), status tabs with counts, sort, List / Cards / Arrivals (by day, next 30 days) / Travellers views, supplier-confirmation progress, countdown and urgency flags, bulk approve / cancel / export, inline Approve, detail-page summary strip (countdown, confirmations, linked payments, copy / WhatsApp / raise ticket).
 * **Help & support**: agents and suppliers raise tickets (category, priority, optional booking), reply, close and reopen; FAQ and office contact on the page. Staff get a queue with KPIs, filters, reply-due timers by priority, assignment, canned replies and internal notes. New permissions `support.view` / `support.reply` / `support.delete` (granted to Customer Support, Agent Manager and Operations Manager on new installs; existing installs: tick them in Staff & access).
 
@@ -113,20 +113,20 @@ Known limits: no record-level restrictions (e.g. "only assigned agents") yet; ex
 * **New public pages** (server-rendered, own meta + JSON-LD + enquiry form): `/umrah-flights`, `/umrah-hotels`, `/umrah-visa`, `/contact`, `/umrah-faq`. Hotels and visa pages read from *Rates & inventory*. Enquiries land in **Queries** (source "website") with the right type (flight / hotel / visa).
 * **Public pages re-themed** to the portal's navy / blue / sunset palette and Plus Jakarta Sans (they were emerald/gold).
 * **Sitemap & robots** include every page with priorities; friendly 404 page (`noindex`); `/app` is `noindex`.
-* **Hotel search in the agent portal**: Flights | Hotels tabs on the search card, destination chips, dates, guests, stars, free-cancellation filter, sort by price / rating / reviews, photo cards with nearby places, *Request quote* goes to the agent's queries. Uses the same SerpApi key as flights.
+* **Hotel search in the agent portal**: Flights | Hotels tabs on the search card, destination chips, dates, guests, stars, free-cancellation filter, sort by price / rating / reviews, photo cards with nearby places, *Request quote* goes to the agent's queries. Uses Travelport Stays search and requires the Stays API entitlement.
 * Landing page: new nav (Packages, Hotels, Visa, Calculator, Transport), six public tool tiles, FAQ. Deep links `/?from=LHE&to=JED` prefill the flight search (used by the Flights page).
 * **PayFast**: constant-time signature check, paid amount must equal the expected amount (otherwise held for review), approved payments cannot be reversed by a late callback, return page links back to the payment link or dashboard, and **Settings > Integrations > Test connection** verifies merchant ID and secured key without moving money. New test: `node scripts/payfast-test.js` (included in `npm test`).
 * CRM polish: table headers, row hover, focus rings, button / card motion.
 
 ### Go-live checklist
-1. Deploy with a persistent disk at `/data`; set `ADMIN_PASSWORD`, `PUBLIC_URL=https://your-domain`, optionally `SERPAPI_KEY`, `GROQ_API_KEY`.
+1. Deploy with a persistent disk at `/data`; set `ADMIN_PASSWORD`, `PUBLIC_URL=https://your-domain`, optionally `TRAVELPORT_*` credentials, `GROQ_API_KEY`.
 2. Settings > Integrations > PayFast: merchant ID, secured key, environment, then **Test connection**. Give PayFast `https://your-domain/payfast/return` (success + failure) and `https://your-domain/payfast/ipn`.
 3. Rates & inventory: add the exchange rate, hotels (Makkah / Madinah) and visa tiers so the public hotel, visa and calculator pages fill up.
 4. Submit `https://your-domain/sitemap.xml` in Google Search Console. Test a shared link in the Facebook Sharing Debugger / WhatsApp.
 
 ## v3.7 - hardening
 * **Receipt uploads** are now verified by file signature (JPG, PNG, GIF, WebP, HEIC, PDF), not just the file extension.
-* **Rate limits**: flight/hotel search is capped per user per hour (protects SerpApi credits); airport autocomplete is capped per IP.
+* **Rate limits**: flight/hotel search is capped per user per hour (protects supplier API capacity); airport autocomplete is capped per IP.
 * **CI**: GitHub Actions workflow (`.github/workflows/ci.yml`) runs `npm test` on every push and pull request.
 
 

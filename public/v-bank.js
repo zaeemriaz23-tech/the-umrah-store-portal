@@ -27,13 +27,17 @@ VIEWS.banking = {
     ${pr.instructions ? `<div class="okbox" style="margin-bottom:14px">${esc(pr.instructions)}</div>` : ''}
     ${banks.length ? `<div class="bkg">${banks.map(b => bankCardHtml(b, `<div class="bka"><button class="btn sm pri" data-act="payAdd" data-a="" data-bank="${esc(b.id)}">${ic('check', 'sm')}I paid this account</button><button class="btn sm" data-act="copyBank" data-a="${esc(b.id)}">${ic('copy', 'sm')}Copy details</button><button class="btn sm wa" data-act="waBank" data-a="${esc(b.id)}">WhatsApp</button></div>`)).join('')}</div>` : `<div class="card">${empty('wallet', 'No bank accounts yet', staff ? 'Add your bank accounts, wallets and Raast IDs under Settings > Banking.' : 'The office has not published any bank accounts yet.', staff && can('settings.banking') ? `<button class="btn pri" data-act="goBankSet">Add bank account</button>` : '')}</div>`}
     ${pr.publicBankPage !== false && banks.length ? `<div class="card cp" style="margin-top:14px"><div class="row sb" style="gap:10px;flex-wrap:wrap"><div><b>Public bank page</b><div class="sub">Anyone can open this list - no login needed: <span class="mono">${esc(location.origin)}/bank-accounts</span></div></div><div class="row"><button class="btn sm" data-act="copyPubLink">${ic('copy', 'sm')}Copy link</button><button class="btn sm wa" data-act="waPubLink">Share on WhatsApp</button><a class="btn sm" target="_blank" href="/bank-accounts">Open</a></div></div></div>` : ''}
-    ${mine.length ? `<div class="gap"></div><div class="card"><div class="ch"><h3>Your latest payments</h3><a class="lnk" href="#/payments">View all</a></div>${mine.map(p => `<div class="item"><div class="mid"><b>${fmt(p.amt)}</b> · ${esc(p.method)}${p.bankName ? ' · ' + esc(p.bankName) : ''}<div class="sub">${fdate(p.date)} ${esc(p.ref || '')}</div></div>${badge(p.status)}</div>`).join('')}</div>` : ''}`;
+    ${mine.length ? `<div class="gap"></div><div class="card"><div class="ch"><h3>Your latest payments</h3><a class="lnk" href="#/payments">View all</a></div>${mine.map(p => `<div class="item"><div class="mid"><b>${fmt(p.amt)}</b>${nativePayMeta(p)} · ${esc(p.method)}${p.bankName ? ' · ' + esc(p.bankName) : ''}<div class="sub">${fdate(p.date)} ${esc(p.ref || '')}</div></div>${badge(p.status)}</div>`).join('')}</div>` : ''}`;
   }
 };
 ACT.goBankSet = () => { UI.setTab = 'bank'; go('settings'); };
 
 /* ---------- Add payment record: amount, which account you paid, receipt - done ---------- */
-const PY = { bank: '', file: null };
+const PY = { bank: '', file: null, currency: 'SAR' };
+const pyRate = () => +((S && S.inv && S.inv.calc) || {}).pkrPerSar || 0;
+const pyCurrencyNote = () => { const r = pyRate(); return PY.currency === 'SAR' ? (r > 0 ? `1 SAR = PKR ${r.toLocaleString('en-US')} · the ledger stores the PKR equivalent; the original SAR amount and rate are retained.` : 'The office SAR → PKR rate is not set. Ask an administrator to update Rates before saving this SAR payment.') : 'This payment is entered in PKR and posted to the PKR accounting ledger.'; };
+const pyNative = base => PY.currency === 'PKR' ? (+base||0) : pyRate() > 0 ? (+base||0) / pyRate() : 0;
+const pyToBase = (amount, currency) => currency === 'PKR' ? Math.round(+amount||0) : pyRate() > 0 ? Math.round((+amount||0)*pyRate()) : 0;
 const methodFor = b => (b ? (b.kind === 'wallet' ? 'JazzCash / Easypaisa' : b.kind === 'raast' ? 'Online banking / Raast' : 'Bank transfer') : 'Cash');
 const owedOf = pid => { if (isAgent()) { const w = S.wallet || {}; return { owed: Math.max(0, w.balance || 0), avail: w.available, name: S.user.name }; } const p = (S.parties || []).find(x => x.id == pid); return p ? { owed: Math.max(0, p.bal || 0), avail: p.kind === 'agent' ? (p.limit || 0) - (p.bal || 0) : null, name: p.name, supplier: p.kind === 'supplier' } : null; };
 function paySummary(pid) {
@@ -44,14 +48,14 @@ function paySummary(pid) {
 const bankTile = (b, on) => `<button type="button" class="bkt ${on ? 'on' : ''}" data-act="pyBank" data-a="${esc(b.id)}">${BankLogo.html(b, 40)}<span><b>${esc(b.bank || b.title)}</b><small>${esc(BKIND[b.kind])}${(b.account || b.wallet || b.raast || b.iban) ? ' · …' + esc(String(b.account || b.wallet || b.raast || b.iban).replace(/\s/g, '').slice(-4)) : ''}</small></span><i>${ic('check', 'sm')}</i></button>`;
 ACT.payAdd = (pid, btn) => {
   const staff = isStaff(), P0 = pid ? +pid : '', pr = S.payRules || { methods: ['Bank transfer', 'Cash', 'Cheque', 'Other'], quickAmounts: [] }, banks = (S.bank || []).filter(b => b.active !== false);
-  PY.bank = (btn && btn.dataset && btn.dataset.bank) || ''; PY.file = null;
+  PY.bank = (btn && btn.dataset && btn.dataset.bank) || ''; PY.file = null; PY.currency = pyRate() > 0 ? 'SAR' : 'PKR';
   const reqR = !staff && pr.requireReceipt, reqF = !staff && pr.requireRef, who = isAgent() ? S.user.pid : P0;
   openModal({ title: 'Add payment', wide: true, body: `<div class="pyw">
   <div class="pyl"><div class="pystep"><span>1</span>Who and how much</div>
   ${staff ? fld('Account *', `<select id="py-p" data-chg="pyParty">${opts((S.parties || []).filter(p => p.active !== false).map(p => [p.id, p.name + ' (' + (p.kind === 'supplier' ? 'supplier - payment out' : p.kind + ' - receipt') + ')']), P0, 'Select account...')}</select>`) : ''}
   <div id="py-sum">${paySummary(who)}</div>
-  ${fld('Amount (PKR) *', '<input id="py-a" type="number" inputmode="numeric" min="1" placeholder="0" class="pybig">')}
-  ${(pr.quickAmounts || []).length ? `<div class="chips">${pr.quickAmounts.map(n => `<button type="button" class="chip" data-act="pyAmt" data-a="${n}">${fnum(n)}</button>`).join('')}</div>` : ''}
+  <div class="py-money-row">${fld('Amount *', '<input id="py-a" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" class="pybig" data-inp="pyAmount">')}${fld('Currency', `<select id="py-cur" data-chg="pyCurrency">${opts([['SAR','SAR · Saudi Riyal'],['PKR','PKR · Pakistani Rupee']], PY.currency)}</select>`)}</div><div id="py-cur-note" class="hint py-currency-note">${esc(pyCurrencyNote())}</div>
+  ${(pr.quickAmounts || []).length ? `<div class="chips">${pr.quickAmounts.map(n => `<button type="button" class="chip" data-act="pyAmt" data-a="${n}">${esc(CUR && CUR.fmtNative ? CUR.fmtNative(pyNative(n), PY.currency) : 'PKR '+fnum(n))}</button>`).join('')}</div>` : ''}
   ${fld('Against booking (optional)', `<select id="py-b" data-chg="pyBook">${bookOpts(who)}</select>`)}
   </div>
   <div class="pyr"><div class="pystep"><span>2</span>Where was it paid</div>
@@ -63,13 +67,15 @@ ACT.payAdd = (pid, btn) => {
   </div><p class="hint" style="margin-top:12px">${staff ? 'Recorded by staff - ' + (can('payments.approve') ? 'posts to the ledger immediately.' : 'goes to the approval queue.') : (pr.autoApproveUnder > 0 ? 'Receipts up to ' + fmt(pr.autoApproveUnder) + ' post to your ledger instantly; larger ones after the office approves.' : 'Posted to your ledger as soon as the office approves it.')}</p>`, foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn pri" data-act="paySave">Save payment</button>' });
 };
 CHG.pyParty = v => { const b = $('#py-b'); if (b) b.innerHTML = bookOpts(+v); const s = $('#py-sum'); if (s) s.innerHTML = paySummary(+v); };
-CHG.pyBook = v => { const bk = (S.bookings || []).find(x => x.id === v); if (bk && !val('py-a')) $('#py-a').value = Math.round(bSell(bk)); };
-ACT.pyFull = n => { $('#py-a').value = n; };
-ACT.pyAmt = n => { $('#py-a').value = n; };
+CHG.pyBook = v => { const bk = (S.bookings || []).find(x => x.id === v); if (bk && !val('py-a')) $('#py-a').value = pyNative(bSell(bk)).toFixed(PY.currency === 'SAR' ? 2 : 0); };
+CHG.pyCurrency = (v) => { if (!['SAR','PKR'].includes(v)) return; const input=$('#py-a'), old=PY.currency||'PKR', value=input&&input.value!==''?+input.value:null, rate=pyRate(); if(value!==null&&value>0&&(old==='SAR'||v==='SAR')&&!(rate>0)){toast('Set the office SAR → PKR rate before converting this payment. Your entered amount has been kept.',true);const sel=$('#py-cur');if(sel)sel.value=old;return;} const base=value===null?null:pyToBase(value,old); PY.currency=v; if(input&&base!==null)input.value=pyNative(base).toFixed(v==='SAR'?2:0); const note=$('#py-cur-note');if(note)note.textContent=pyCurrencyNote(); };
+INP.pyAmount = () => { const note=$('#py-cur-note'); if(note)note.textContent=pyCurrencyNote(); };
+ACT.pyFull = n => { $('#py-a').value = pyNative(+n||0).toFixed(PY.currency==='SAR'?2:0); };
+ACT.pyAmt = n => { $('#py-a').value = pyNative(+n||0).toFixed(PY.currency==='SAR'?2:0); };
 ACT.pyBank = id => { PY.bank = id; $$('#py-banks .bkt').forEach(c => c.classList.toggle('on', c.dataset.a === id)); const b = (S.bank || []).find(x => x.id === id), m = $('#py-m'); if (m) m.value = methodFor(b); };
 CHG.pyFile = (v, t) => { const f = t.files[0]; PY.file = f || null; const n = $('#py-fn'); if (!f) return; if (f.size > 6e6) { PY.file = null; t.value = ''; return toast('Receipt too large (max 6 MB)', true); } n.innerHTML = /^image\//.test(f.type) ? `<img src="${URL.createObjectURL(f)}" class="pv" alt=""><small>${esc(f.name)} · tap to change</small>` : `${ic('file')}<b>${esc(f.name)}</b><small>tap to change</small>`; };
 ACT.paySave = async (a, b) => {
   const f = PY.file; let file; if (f) file = { name: f.name, data: await readFile(f) };
-  try { const r = await doRpc(b, 'addPayment', { partyId: isStaff() ? +val('py-p') : undefined, amt: val('py-a'), date: val('py-d'), method: val('py-m'), ref: val('py-r'), note: val('py-n'), bookingId: val('py-b'), bankId: PY.bank, file }); closeModal(); toast(r.status === 'Approved' ? 'Payment saved and posted to the ledger' : 'Payment submitted - waiting for approval'); } catch { /* shown by doRpc */ }
+  try { const r = await doRpc(b, 'addPayment', { partyId: isStaff() ? +val('py-p') : undefined, amt: val('py-a'), currency: $('#py-cur') ? $('#py-cur').value : (PY.currency || 'SAR'), currencyAmount: val('py-a'), date: val('py-d'), method: val('py-m'), ref: val('py-r'), note: val('py-n'), bookingId: val('py-b'), bankId: PY.bank, file }); closeModal(); toast(r.status === 'Approved' ? 'Payment saved and posted to the ledger' : 'Payment submitted - waiting for approval'); } catch { /* shown by doRpc */ }
 };
 ACT.bankInfo = () => go('banking');

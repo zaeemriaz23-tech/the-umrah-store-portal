@@ -63,6 +63,13 @@ A redeploy therefore cannot erase CRM records or uploads. Verify with `/healthz`
 | Settings panel says *Temporary storage* | `DB_*` variables are not set: data is only on disk. Configure MySQL now |
 
 ## 6. Other settings
-* Settings → AI assistant (Groq key), Settings → Email & notifications (SMTP; Hostinger mailbox: `smtp.hostinger.com`, port 465, SSL/TLS), Settings → Integrations (WhatsApp, PayFast, SerpApi).
+* Settings → AI assistant (Groq key), Settings → Email & notifications (SMTP; Hostinger mailbox: `smtp.hostinger.com`, port 465, SSL/TLS), Settings → Integrations (WhatsApp, PayFast and Travelport (Travelport secrets belong in Hostinger Environment Variables)).
 * Enable HTTPS for the domain in hPanel. Live chat uses Server-Sent Events with a polling fallback.
 * WhatsApp login files live in `DATA_DIR/wa-auth`; keep `DATA_DIR` outside the app folder to avoid re-linking the phone after a redeploy.
+
+
+## Travelport TripServices setup
+
+Add the following server environment variables in Hostinger (never in browser code or Git): `TRAVELPORT_ENV=preproduction`, `TRAVELPORT_USERNAME`, `TRAVELPORT_PASSWORD`, `TRAVELPORT_CLIENT_ID`, `TRAVELPORT_CLIENT_SECRET`, and `TRAVELPORT_ACCESS_GROUP` (or the alternative `TRAVELPORT_PCC_CORE` only if Travelport assigns it). Optionally set `TRAVELPORT_CONTENT_SOURCES=GDS` (enable `NDC` only after Travelport confirms entitlement) and `TRAVELPORT_HOTEL_CURRENCY=SAR`. Ask Travelport to confirm Air API and Stays API entitlements separately.
+
+The agent flight workflow performs Travelport search, live fare revalidation, reservation hold, then PKR collection through the configured PayFast gateway. A successful agent payment changes the order to **Payment Received - Ticketing Required**; it does not falsely mark the reservation as ticketed. The office must complete the supplier ticketing workflow using the agency's Travelport-approved form of payment and ticketing entitlement. Hotel search uses SearchComplete; hotel booking is not enabled until Stays booking/FOP and payment access are confirmed. Ground transfers continue to use the portal's existing transport supplier and booking workflow; they are not Travelport transfer inventory.

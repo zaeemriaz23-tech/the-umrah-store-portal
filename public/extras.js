@@ -1,4 +1,4 @@
-/* Header tools: live currency switcher (SerpApi rates), balance chip, real notifications, working global search */
+/* Header tools: saved office currency rates, balance chip, real notifications, working global search */
 'use strict';
 Object.assign(IC, { globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.8 3.9 5.8 3.9 9s-1.3 6.2-3.9 9c-2.6-2.8-3.9-5.8-3.9-9S9.4 5.8 12 3z"/>' });
 const ago = iso => { const s = Math.max(0, (Date.now() - new Date(iso)) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago'; if (s < 86400) return Math.floor(s / 3600) + ' h ago'; return ftime(iso); };
@@ -6,18 +6,34 @@ const ago = iso => { const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
 /* ======================= CURRENCY ======================= */
 const CURNAME = { PKR: 'Pakistani Rupee', USD: 'US Dollar', SAR: 'Saudi Riyal', AED: 'UAE Dirham', GBP: 'British Pound', EUR: 'Euro' };
 (() => {
-  let saved = 'PKR'; try { saved = localStorage.getItem('cur') || 'PKR'; } catch { /* private mode */ }
+  let saved = 'SAR'; try {
+    // One-time default change for existing portal users: prefer SAR, while preserving any later manual choice.
+    if (localStorage.getItem('tus.currency-default-v13') !== '1') { localStorage.setItem('cur', 'SAR'); localStorage.setItem('tus.currency-default-v13', '1'); saved = 'SAR'; }
+    else saved = localStorage.getItem('cur') || 'SAR';
+  } catch { /* private mode */ }
   const fx = () => S.fx || { perUnit: {}, src: {}, codes: ['PKR'] };
   Object.assign(CUR, {
     code: saved,
-    per: c => (c === 'PKR' ? 1 : +(fx().perUnit || {})[c] || 0),
-    ok: c => c === 'PKR' || CUR.per(c) > 0,
-    active() { return CUR.ok(CUR.code) ? CUR.code : 'PKR'; },
+    per(c) {
+      if (c === 'PKR') return 1;
+      // The office-maintained SAR/PKR rate is the accounting conversion for Umrah operations.
+      if (c === 'SAR') return +((S && S.inv && S.inv.calc) || {}).pkrPerSar || 0;
+      return +(fx().perUnit || {})[c] || 0;
+    },
+    ok(c) { return c === 'PKR' || CUR.per(c) > 0; },
+    active() { return CUR.ok(CUR.code) ? CUR.code : (CUR.ok('SAR') ? 'SAR' : 'PKR'); },
     conv(n) { const c = CUR.active(); return c === 'PKR' ? (+n || 0) : (+n || 0) / CUR.per(c); },
+    toBase(n, c = CUR.active()) { const x = Math.max(0, +n || 0); if (c === 'PKR') return Math.round(x); const r = CUR.per(c); return r > 0 ? Math.round(x * r) : 0; },
+    fromBase(n, c = CUR.active()) { const x = Math.max(0, +n || 0); if (c === 'PKR') return x; const r = CUR.per(c); return r > 0 ? x / r : 0; },
+    fmtNative(n, c) { c = c || CUR.active(); const x = +n || 0; return c + ' ' + x.toLocaleString('en-US', { minimumFractionDigits: c === 'PKR' ? 0 : 2, maximumFractionDigits: c === 'PKR' ? 0 : 2 }); },
     fmt(n) { const c = CUR.active(); if (c === 'PKR') return 'PKR ' + fnum(n); return c + ' ' + CUR.conv(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
     set(c) { CUR.code = c; try { localStorage.setItem('cur', c); } catch { /* ignore */ } }
   });
 })();
+
+// Original transaction denomination is shown beside its PKR-ledger equivalent where available.
+const nativePayMeta = p => p && p.currency === 'SAR' && p.currencyAmount != null
+  ? `<small class="native-money-meta">Entered ${esc(CUR.fmtNative(p.currencyAmount, 'SAR'))}${p.currencyFxRate ? ' · FX ' + esc(String(+p.currencyFxRate)) : ''}</small>` : '';
 
 /* ======================= HEADER ======================= */
 const Hdr = {
@@ -49,20 +65,20 @@ const Cur = {
   paint() {
     const f = S.fx || { codes: ['PKR'], perUnit: {}, src: {} }, p = $('#cur-pop'); if (!p) return;
     const rows = (f.codes || ['PKR']).map(c => {
-      const per = CUR.per(c), on = CUR.active() === c, tag = c === 'PKR' ? 'base' : (f.src || {})[c] === 'manual' ? 'manual' : per ? 'live' : '';
+      const per = CUR.per(c), on = CUR.active() === c, tag = c === 'PKR' ? 'base' : (f.src || {})[c] === 'manual' ? 'manual' : per ? 'saved' : '';
       return `<button class="cur ${on ? 'on' : ''}" ${c !== 'PKR' && !per ? 'disabled' : ''} data-act="curSet" data-a="${c}"><b>${c}</b><span>${esc(CURNAME[c] || c)}<small>${c === 'PKR' ? 'Base currency' : per ? '1 ' + c + ' = PKR ' + per.toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'rate unavailable'}</small></span>${tag ? `<em class="${tag}">${tag}</em>` : ''}${on ? ic('check', 'sm') : ''}</button>`;
     }).join('');
-    const foot = !f.configured ? `<div class="cfoot warn">${ic('alert', 'sm')}<span>Live rates need a SerpApi key. ${isAdmin() || can('integrations.manage') ? '<a href="#/settings">Add it in Settings → Integrations</a>.' : 'Ask the administrator to add it in Settings.'}${(f.perUnit || {}).SAR ? '' : ''}</span></div>`
-      : `<div class="cfoot">${f.updated ? 'Live · ' + esc(f.source || 'SerpApi') + ' · updated ' + ago(f.updated) : (f.error ? '<span class="neg">' + esc(f.error) + '</span>' : 'Fetching live rates…')}<button class="lnk" data-act="curRefresh">${ic('refresh', 'sm')}Refresh</button></div>${f.error && f.updated ? `<div class="cfoot warn"><span>Some rates failed: ${esc(f.error)}</span></div>` : ''}`;
-    p.innerHTML = `<div class="ph2">Display currency</div>${rows}${foot}<div class="cnote">Display only. Bookings, ledgers and payments are always recorded in PKR.</div>`;
+    const foot = !f.configured ? `<div class="cfoot warn">${ic('alert', 'sm')}<span>No saved office exchange rates are available. Ask the administrator to update Rates & Inventory.</span></div>`
+      : `<div class="cfoot">${f.updated ? 'Saved office rates · updated ' + ago(f.updated) : 'Saved office rates'} </div>`;
+    p.innerHTML = `<div class="ph2">Display currency</div>${rows}${foot}<div class="cnote">Amounts are displayed in the selected currency. The accounting ledger keeps its existing PKR base; new SAR entries retain their original amount and the exchange-rate snapshot used at entry time.</div>`;
   }
 };
 ACT.curToggle = async () => {
   const p = $('#cur-pop'), open = p.hidden; $$('.hpop').forEach(x => { x.hidden = true; }); if (!open) return; p.hidden = false; Cur.paint();
   if (S.fx && S.fx.configured && !S.fx.updated) { try { S.fx = await api('/api/fx'); } catch { /* shown in popover */ } Hdr.update(); Cur.paint(); }
 };
-ACT.curSet = c => { if (!CUR.ok(c)) return toast('No live rate for ' + c + ' yet', true); CUR.set(c); $$('.hpop').forEach(x => { x.hidden = true; }); Hdr.update(); renderShellBits(); renderView(); toast('Showing amounts in ' + c); };
-ACT.curRefresh = async (a, b) => { busy(b, true); try { S.fx = await api('/api/fx/refresh', { method: 'POST', body: '{}' }); Cur.paint(); Hdr.update(); renderView(); toast(S.fx.error && !S.fx.updated ? S.fx.error : 'Rates refreshed', !!(S.fx.error && !S.fx.updated)); } catch (e) { toast(e.message, true); busy(b, false); } };
+ACT.curSet = c => { if (!CUR.ok(c)) return toast('No saved rate for ' + c + ' yet', true); CUR.set(c); $$('.hpop').forEach(x => { x.hidden = true; }); Hdr.update(); renderShellBits(); renderView(); toast('Showing amounts in ' + c); };
+ACT.curRefresh = async () => toast('Exchange rates are managed by the office; no external rate service is connected.');
 
 /* ======================= NOTIFICATIONS ======================= */
 const NIC = { booking: 'briefcase', pay: 'wallet', query: 'bell', ticket: 'ticket', ok: 'check', warn: 'alert', bad: 'alert', info: 'info' };
