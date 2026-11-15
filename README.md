@@ -1,7 +1,7 @@
 # The Umrah Store CRM v3
 
 B2B / B2C travel operations: bookings, vouchers, ledgers, payments, queries, live search, group packages.
-Node.js 18+, Express, one JSON data file (daily auto-backup). No fake or demo data - everything starts empty.
+Node.js 18+, Express, persistent MySQL storage (recommended) or a local JSON data file. Automatic restore points/backups are supported. No fake or demo data - everything starts empty.
 
 ## Run
 ```
@@ -26,12 +26,14 @@ Existing v2 databases are migrated automatically (agents, suppliers, payments, j
   Booking number is random (e.g. `TUS-K6ZS-B2QF`) and searchable. Duplicate passport + overlapping travel dates is blocked (staff can override with confirmation).
 * **Vouchers**: one click anywhere (full / per service / custom). Shareable link + QR. Carries a **PENDING** watermark until the administrator approves; **CANCELLED** when cancelled. Supplier names never appear.
 * **Agent wallet**: available balance = credit limit - outstanding (advance deposits add to it). Agents can always book, even at zero balance - the balance then shows with a minus sign (e.g. `- PKR 50,000`) in the header, ledger and dashboard until settled.
-* **Payments**: PayFast online checkout, one-link payment page (`/pay/<token>`, PayFast or bank transfer + receipt upload), manual records with receipt, bank details + QR, approval queue, printable receipts.
+* **Payments**: PayFast online checkout, one-link payment page (`/pay/<token>`, PayFast or bank transfer + receipt upload), manual records with receipt, bank details + QR, approval queue, editable manual payments with audit history, A4 receipts and separate 80 mm thermal receipts. Gateway/system-generated payments are locked against manual edits.
+* **Quotations** (`#/quotations`): build customer-specific A4 quotations with traveller details and hotel, flight, visa, transport, package and custom service lines. Each quote has its own currency, rates, discount, tax, validity, inclusions, exclusions and terms. Save, edit, print or save as PDF independently of bookings. One-click conversion validates traveller/passport data, creates a Pending booking, links it back to the quote and prevents duplicate conversion. Booking conversion currently supports PKR and SAR only.
+* **Live chat**: visitors and staff can attach supported files, record/send voice messages, and download shared attachments. Visitors with a valid email can receive email replies when SMTP is configured; desktop notifications require browser permission and are available only while the browser/site can receive them.
 * **Queries**: from agents, search results or WhatsApp. Auto-rejected if unanswered (flight 2h, hotel 6h, visa 24h, transport 12h, package/other 24h - editable). Staff reply with quote; agent accepts; staff convert to booking.
 * **Group packages**: import the supplier PDF (parsed in the browser, preview before publishing). Package disappears automatically after its departure date.
 * **Search**: live flights and hotel search through Travelport TripServices, with markup. Without Travelport credentials it shows a setup message, never sample results.
 * **Reports**: sales, cost, profit, margin, expenses, by category / agent / service / supplier, CSV export.
-* **AI assistant** (admin, Groq): answers questions about everything in the CRM and can only **add or remove** records; every change is proposed and needs your confirmation. See v3.3.
+* **AI assistant** (admin): uses xAI Grok with multiple API keys and automatic backup-key retry for rate-limit responses; the legacy Groq configuration remains supported when no xAI key is set. The assistant answers questions across the CRM and only performs changes allowed by its configured permissions/confirmation flow. Configure keys in Settings > AI assistant or with `XAI_API_KEY` / `XAI_API_KEYS`.
 
 ## Integrations - set up in Settings
 * **PayFast (APPS Pakistan)**: merchant ID + secured key, environment sandbox/live. Give PayFast: success/failure URL `https://YOUR-DOMAIN/payfast/return`, IPN URL `https://YOUR-DOMAIN/payfast/ipn`. Set *Public address* in Settings to your domain.
@@ -40,7 +42,7 @@ Existing v2 databases are migrated automatically (agents, suppliers, payments, j
 * **WhatsApp**: Settings > Integrations > Link WhatsApp, scan the QR. Uses the unofficial WhatsApp Web protocol (Baileys): fine for small inbound query capture, but WhatsApp may restrict numbers - use a dedicated number.
 
 ## Notes
-* Single instance only (JSON store). Backups: Settings > Data, plus `data/backups` daily.
+* Run a single application instance unless your deployment is configured for shared persistent storage. Use MySQL for production; local JSON mode is intended for development/single-instance deployments. Backups: Settings > Data, plus scheduled restore points when MySQL backup settings are enabled.
 * Always serve over HTTPS in production.
 
 
@@ -79,8 +81,8 @@ Tests: `node scripts/engine-check.js`
 Known limits: no record-level restrictions (e.g. "only assigned agents") yet; export permission gates and audits the export action, but CSV files are built in the browser from data the user is already allowed to view; single instance JSON store as before.
 
 
-## v3.3 - Groq assistant, bank accounts, deeper settings
-* **AI assistant now uses Groq** (`GROQ_API_KEY` or Settings > AI assistant). It answers questions about anything (bookings, passengers, ledgers, balances, payments, expenses, groups, queries, profit, pending items) through read-only tools, remembers the last messages of the chat, and can still only **add or remove** records after you confirm. Settings: key, model (with a *Test key & load models* button), creativity, read-only switch, max changes per request, extra instructions. Without a key, simple commands still work (`summary`, `pending`, `balance of ...`, `add agent ...`). Anthropic support was removed.
+## v3.3 - Legacy Groq assistant, bank accounts, deeper settings
+* **Legacy AI assistant provider: Groq** (`GROQ_API_KEY` or Settings > AI assistant). This provider remains available as a compatibility fallback; v3.22.0 adds xAI Grok as the primary provider with multi-key 429 failover. It answers questions about anything (bookings, passengers, ledgers, balances, payments, expenses, groups, queries, profit, pending items) through read-only tools, remembers the last messages of the chat, and can still only **add or remove** records after you confirm. Settings: key, model (with a *Test key & load models* button), creativity, read-only switch, max changes per request, extra instructions. Without a key, simple commands still work (`summary`, `pending`, `balance of ...`, `add agent ...`). Anthropic support was removed.
 * **Bank accounts page** (`#/banking`, agents and staff): every active bank account, mobile wallet (JazzCash/Easypaisa) and Raast ID as a card with copy buttons, QR, and *I paid this account*, *Copy details*, *WhatsApp share*. Agents also see their outstanding / available credit / awaiting approval.
 * **Public bank page** `/bank-accounts` (no login, `noindex`) plus `/api/public/banks`. Shown on the sign-in page too. Per account switch *Show on the public bank page*, and a global switch in Settings > Payments.
 * **Add payment record in one tap**: amount (quick-amount chips) -> tap the account you paid -> attach receipt photo -> save. Date, method, booking and note are under *More details*. The payment remembers which bank it went to.
@@ -119,7 +121,7 @@ Known limits: no record-level restrictions (e.g. "only assigned agents") yet; ex
 * CRM polish: table headers, row hover, focus rings, button / card motion.
 
 ### Go-live checklist
-1. Deploy with a persistent disk at `/data`; set `ADMIN_PASSWORD`, `PUBLIC_URL=https://your-domain`, optionally `TRAVELPORT_*` credentials, `GROQ_API_KEY`.
+1. Deploy with a persistent disk at `/data`; set `ADMIN_PASSWORD`, `PUBLIC_URL=https://your-domain`, optionally `TRAVELPORT_*` credentials, `XAI_API_KEY` / `XAI_API_KEYS` (or legacy `GROQ_API_KEY`).
 2. Settings > Integrations > PayFast: merchant ID, secured key, environment, then **Test connection**. Give PayFast `https://your-domain/payfast/return` (success + failure) and `https://your-domain/payfast/ipn`.
 3. Rates & inventory: add the exchange rate, hotels (Makkah / Madinah) and visa tiers so the public hotel, visa and calculator pages fill up.
 4. Submit `https://your-domain/sitemap.xml` in Google Search Console. Test a shared link in the Facebook Sharing Debugger / WhatsApp.
@@ -130,10 +132,27 @@ Known limits: no record-level restrictions (e.g. "only assigned agents") yet; ex
 * **CI**: GitHub Actions workflow (`.github/workflows/ci.yml`) runs `npm test` on every push and pull request.
 
 
+## Cloudflare R2 database backups (v3.23.1)
+
+When MySQL is the authoritative store, administrators can configure backups under **Admin → Settings → Cloud Backup**. Enter the Cloudflare Account ID, R2 bucket, S3 API endpoint, Access Key ID and Secret Access Key, then run **Test R2 connection**. The test checks list, write, metadata, read-back and delete permissions. Use an R2 API token scoped to Object Read & Write for the selected bucket.
+
+Daily backups run at **02:00 Asia/Karachi**. The service captures the authoritative `crm_state.payload` record set after pending MySQL writes have flushed, removes login sessions and embedded upload bytes, gzip-compresses the archive, encrypts it using AES-256-GCM, and uploads it with the R2 S3-compatible API (SigV4, region `auto`). An upload is marked successful only after HEAD size/metadata checks, a full GET read-back SHA-256 check, and authenticated archive decryption/parsing. The latest **30 daily objects** are retained; manual backups are separately recorded. Failed uploads appear as failures and never count as successful cloud backups or silently fall back to local storage.
+
+**Encryption key:** set a dedicated `CLOUD_BACKUP_ENCRYPTION_KEY` (at least 32 characters) in the server environment before saving R2 credentials. Generate a value with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. The service deliberately fails closed if this key is missing; it never falls back to `DB_PASSWORD`. Keep this key stable and outside Git. It protects R2 credentials in MySQL and backup archive contents; losing or changing it prevents decryption of existing records and archives.
+
+The CRM stores its active business records in the single MySQL `crm_state` row; this is the complete application record set. The separate `crm_files` table (receipts, KYC, logos, QR images, chat attachments and other uploads) is deliberately excluded from R2 backups. Server-only R2 credentials are also excluded from exports/archives and remain configured on the current server. File metadata/paths remain in records where applicable, but the actual upload bytes are not copied. Restoring an R2 backup creates a pre-restore MySQL restore point first, keeps the current administrator password and sessions, retains the current R2 configuration and existing uploaded files, and replaces the CRM records from the selected archive. Type `RESTORE R2` to confirm. The uploaded files themselves are not rolled back by this database-only restore.
+
+The service uses an additive `crm_cloud_backup_runs` history table and a MySQL advisory lock plus a unique persisted Pakistan-date run key. It recovers its schedule after server restarts and avoids duplicate daily backups across simultaneous Node processes. No existing table is dropped or reset.
+
 ## MySQL primary storage (v3.13.0)
 
-When `DB_HOST`, `DB_NAME`, `DB_USER` and `DB_PASSWORD` are configured, MySQL is the authoritative store. On first start the app creates `crm_state`, `crm_state_backups` and `crm_files`, imports an existing valid `DATA_DIR/db.json` if the MySQL state row is empty (the file is kept), uploads existing receipts/KYC/logo/promotion files into MySQL, and from then on loads from MySQL only. A stale local file never overrides MySQL.
+When `DB_HOST`, `DB_NAME`, `DB_USER` and `DB_PASSWORD` are configured, MySQL is the authoritative store. On first start the app creates `crm_state`, `crm_state_backups`, `crm_files` and `crm_cloud_backup_runs`, imports an existing valid `DATA_DIR/db.json` if the MySQL state row is empty (the file is kept), uploads existing receipts/KYC/logo/promotion files into MySQL, and from then on loads from MySQL only. A stale local file never overrides MySQL.
 
 Safety rules built in: additive schema changes only (no DROP/TRUNCATE), a `pre-migration` restore point before every version upgrade, automatic scheduled and daily restore points, automatic retry of failed writes, refusal to overwrite a newer MySQL revision, recovery (not a blank CRM) if `crm_state` is emptied, and restore of any missing upload from MySQL at start. The existing admin password is never changed by a restart or redeploy. Set `REQUIRE_MYSQL=1` in production so missing database variables stop the app instead of starting on temporary storage. Without `DB_*` variables the CRM runs in local JSON mode (development and tests). Admin tools: Settings → Data & activity → Data safety & backups, `scripts/verify-storage.js`, `scripts/restore-backup.js`. See `HOSTINGER.md`.
 
 Tests: `npm test` runs everything. Set `TEST_MYSQL_HOST`, `TEST_MYSQL_USER`, `TEST_MYSQL_PASSWORD` and `TEST_MYSQL_DB` (the database name must contain "test") to also run the real-database storage suite.
+
+
+### Custom airline logos for group packages
+
+Only administrators can open **Settings → Airline logos** and upload a PNG, JPG or WebP image against an airline's two-character IATA code (for example `SV`, `PK` or `EK`). The logo is served from the CRM's local brand route and takes priority over the default airline image in group-package cards, departure lists, filters and server-rendered package pages. Replacing or removing the logo refreshes the cache version across those surfaces. Uploaded logo files are stored in `DATA_DIR/brand/airlines/custom/` and mirrored into the existing MySQL `crm_files` table; they are not part of the database-only Cloudflare R2 backup. Keep the existing `DATA_DIR` and `crm_files` table intact during deployment.

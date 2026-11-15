@@ -31,7 +31,9 @@ const Brand = require('./lib/brand');
 const Seat = require('./lib/meezab');
 const Sup = require('./lib/supplier');
 const Maint = require('./lib/maintenance');
+const CloudBackup = require('./lib/cloud-backup');
 const F = require('./lib/files');
+const AirLogos = require('./lib/airline-logos');
 const E = require('./public/engine.js');
 
 const PORT = process.env.PORT || 3000;
@@ -39,10 +41,10 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(compression({ filter: (req, res) => !/\/stream$/.test(req.path) && compression.filter(req, res) }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '45mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use((req, res, next) => {
-  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()', 'Content-Security-Policy': "frame-ancestors 'self'; base-uri 'self'; object-src 'none'", 'Cross-Origin-Opener-Policy': 'same-origin-allow-popups' });
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()', 'Content-Security-Policy': "frame-ancestors 'self'; base-uri 'self'; object-src 'none'", 'Cross-Origin-Opener-Policy': 'same-origin-allow-popups' });
   if (req.secure) res.set('Strict-Transport-Security', 'max-age=15552000');
   next();
 });
@@ -91,12 +93,13 @@ app.post('/api/login', (req, res) => {
   if (!limit('login:' + req.ip, Math.max(3, +db.settings.security.loginMax || 10), 9e5)) return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
   const u = db.users.find(x => x.login === String(req.body.login || '').toLowerCase().trim());
   if (!u || u.active === false || u.suspended || !check(String(req.body.password || ''), u.pw)) { const h = !u && SU.loginHint(req.body.login, req.body.password); return res.status(h ? 403 : 401).json({ error: h || 'Incorrect username or password', pendingApproval: !!h }); }
+  if (req.body.internalOnly && !['admin', 'staff'].includes(u.role)) return res.status(403).json({ error: 'This sign-in page is only for administrators and internal staff.' });
   if (Maint.isOn() && !Maint.allows(u)) return res.status(503).json({ error: Maint.publicInfo().title + '. Only administrators and internal staff can sign in right now. Please try again later.', maintenance: true });
   const sid = crypto.randomBytes(24).toString('hex');
   const sd = Math.max(1, +db.settings.security.sessionDays || 7); db.sessions[sid] = { uid: u.id, exp: Date.now() + 864e5 * sd };
   u.lastLogin = new Date().toISOString(); D.logAct(u, 'login', ''); save();
   res.cookie('sid', sid, { httpOnly: true, sameSite: 'lax', secure: req.secure, maxAge: 864e5 * sd });
-  res.json({ ok: true });
+  res.json({ ok: true, role: u.role });
 });
 app.post('/api/logout', (req, res) => { delete db.sessions[cookie(req, 'sid')]; save(); res.clearCookie('sid'); res.json({ ok: true }); });
 
@@ -112,7 +115,7 @@ app.get('/api/ledger/:pid', auth, (req, res) => {
   res.json({ party: { id: p.id, kind: p.kind, name: p.name, phone: p.phone, city: p.city, limit: p.limit }, rows: L.ledger(pid), wallet: p.kind === 'agent' ? L.wallet(pid) : null });
 });
 
-const AUDITED = { setStatus: 'booking.status', delBooking: 'booking.deleted', saveBooking: 'booking.saved', addPayment: 'payment.recorded', approvePayment: 'payment.approved', rejectPayment: 'payment.rejected', delPayment: 'payment.deleted', createPaylink: 'paylink.created',
+const AUDITED = { setStatus: 'booking.status', delBooking: 'booking.deleted', saveBooking: 'booking.saved', addPayment: 'payment.recorded', updatePayment: 'payment.edited', approvePayment: 'payment.approved', rejectPayment: 'payment.rejected', delPayment: 'payment.deleted', saveQuotation: 'quotation.saved', delQuotation: 'quotation.deleted', convertQuotationToBooking: 'quotation.converted_to_booking', createPaylink: 'paylink.created',
   addEntry: 'ledger.entry_posted', delEntry: 'ledger.entry_deleted', delExpense: 'expense.deleted', addExpense: 'expense.added', saveParty: 'party.saved', delParty: 'party.deleted', importData: 'data.imported', saveUser: 'staff.legacy_user_saved', delUser: 'staff.legacy_user_deleted', delVoucher: 'voucher.deleted', delQuery: 'query.deleted', setLogo: 'branding.logo_changed', resetLogo: 'branding.logo_reset' };
 app.post('/api/rpc', auth, (req, res) => {
   try {
@@ -149,6 +152,7 @@ app.post('/api/fx/refresh', auth, async (req, res) => {
 /* ---------- branding, files ---------- */
 const FILE_OK = f => fs.existsSync(f) && fs.statSync(f).isFile();
 const PUB = path.join(__dirname, 'public');
+global.TUS_AIRLINE_LOGO_V = db.settings.airlineLogoV || 0;
 /* Logo: a custom upload wins; otherwise the optimised set (WebP for modern browsers, PNG fallback). ?s=lg serves the 2x asset. */
 app.get('/brand/logo', (req, res) => {
   const f = fs.readdirSync(path.join(DATA, 'brand')).find(x => x.startsWith('logo.'));
@@ -179,6 +183,8 @@ async function airlineLogo(code) {
 }
 app.get('/brand/airline/:code.png', async (req, res) => {
   const code = String(req.params.code || '').toUpperCase(); if (!/^[A-Z0-9]{2}$/.test(code)) return res.sendStatus(404);
+  const custom = AirLogos.find(code);
+  if (custom) return res.set({ 'Cache-Control': 'public, max-age=31536000, immutable' }).type(custom.mime).sendFile(custom.path);
   const f = await airlineLogo(code);
   if (!f) { const col = String(E.airColor(code)).replace(/[^#0-9a-fA-F]/g, '') || '#126047'; return res.set({ 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).send(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="${code}"><rect width="96" height="96" rx="22" fill="${col}"/><path d="M14 66c18-3 34-14 52-34 3-3 8-4 12-2-2 5-6 11-14 18 4 8 6 14 4 18-6-2-12-8-17-15-9 7-21 12-37 15z" fill="#fff" opacity=".16"/><text x="48" y="59" font-family="Arial,Helvetica,sans-serif" font-weight="800" font-size="34" text-anchor="middle" fill="#fff">${code}</text></svg>`); }
   res.set('Cache-Control', 'public, max-age=2592000, immutable').sendFile(f);
@@ -202,7 +208,8 @@ app.get('/receipt/:id', auth, payView, async (req, res) => {
 app.get('/api/backup', auth, perm('data.backup'), (req, res) => {
   PM.audit(req.u, 'export.backup', 'full database', {}); save();
   res.set({ 'Content-Type': 'application/json', 'Content-Disposition': 'attachment; filename="umrah-store-backup-' + today() + '.json"' });
-  res.send(JSON.stringify({ ...db, sessions: {} }));
+  const snapshot = JSON.parse(JSON.stringify(db)); snapshot.sessions = {}; if (snapshot.settings) delete snapshot.settings.cloudBackup;
+  res.send(JSON.stringify(snapshot));
 });
 
 /* ---------- data safety: restore points stored in MySQL (crm_state_backups) ---------- */
@@ -220,7 +227,7 @@ app.post('/api/backups', auth, perm('data.backup'), async (req, res) => {
 });
 app.get('/api/backups/:id/download', auth, perm('data.backup'), async (req, res) => {
   try {
-    const b = await D.getBackup(req.params.id), o = JSON.parse(b.payload); o.sessions = {};
+    const b = await D.getBackup(req.params.id), o = JSON.parse(b.payload); o.sessions = {}; if (o.settings) delete o.settings.cloudBackup;
     PM.audit(req.u, 'export.backup', 'restore point #' + b.id, {}); save();
     res.set({ 'Content-Type': 'application/json', 'Content-Disposition': 'attachment; filename="umrah-store-restore-point-' + b.id + '.json"' }).send(JSON.stringify(o));
   } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
@@ -229,6 +236,46 @@ app.post('/api/backups/:id/restore', auth, adminOnly, async (req, res) => {
   if (req.body.confirm !== 'RESTORE') return res.status(400).json({ error: 'Type RESTORE to confirm.' });
   if (!limit('rs:' + req.u.id, 3, 36e5)) return res.status(429).json({ error: 'Too many restores. Try again later.' });
   try { const r = await D.restoreBackup(req.params.id); PM.audit(req.u, 'data.restored', 'restore point #' + req.params.id, {}); save(); res.json({ ok: true, ...r }); } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
+});
+
+/* ---------- Cloudflare R2 encrypted database-only backups (administrator only) ---------- */
+app.get('/api/cloud-backup/status', auth, adminOnly, async (req, res) => {
+  try { res.set('Cache-Control', 'no-store').json(await CloudBackup.status(60)); }
+  catch (e) { res.status(503).set('Cache-Control', 'no-store').json({ error: e.message }); }
+});
+app.post('/api/cloud-backup/config', auth, adminOnly, async (req, res) => {
+  if (!limit('cloud-cfg:' + req.u.id, 10, 36e5)) return res.status(429).json({ error: 'Too many R2 credential updates. Please retry later.' });
+  try {
+    const r = CloudBackup.saveConfig(req.body || {});
+    D.logAct(req.u, 'Cloud Backup settings updated', 'Cloudflare R2 credentials encrypted and saved');
+    save(); await D.flushAsync();
+    res.set('Cache-Control', 'no-store').json({ ok: true, config: r.config, updatedAt: r.updatedAt });
+  } catch (e) { res.status(400).set('Cache-Control', 'no-store').json({ error: e.message }); }
+});
+app.post('/api/cloud-backup/test', auth, adminOnly, async (req, res) => {
+  if (!limit('cloud-test:' + req.u.id, 10, 36e5)) return res.status(429).set('Cache-Control', 'no-store').json({ error: 'Too many R2 connection tests. Please retry later.' });
+  try { const r = await CloudBackup.connectionTest(); res.set('Cache-Control', 'no-store').json(r); }
+  catch (e) { res.status(502).set('Cache-Control', 'no-store').json({ ok: false, error: e.message }); }
+});
+app.post('/api/cloud-backup/run', auth, adminOnly, async (req, res) => {
+  if (!limit('cloud-bk:' + req.u.id, 5, 36e5)) return res.status(429).json({ error: 'Too many manual cloud backups. Please retry later.' });
+  try {
+    const r = await CloudBackup.runBackup({ kind: 'manual', triggeredBy: req.u.name || 'administrator' });
+    if (!r.ok) return res.status(409).set('Cache-Control', 'no-store').json(r);
+    PM.audit(req.u, 'cloud.backup.created', r.objectKey, { revision: r.revision, size: r.size, sha256: r.sha256 });
+    save(); await D.flushAsync();
+    res.set('Cache-Control', 'no-store').json(r);
+  } catch (e) { res.status(502).set('Cache-Control', 'no-store').json({ ok: false, error: e.message }); }
+});
+app.post('/api/cloud-backup/:id/restore', auth, adminOnly, async (req, res) => {
+  if (req.body.confirm !== 'RESTORE R2') return res.status(400).json({ error: 'Type RESTORE R2 exactly to confirm.' });
+  if (!limit('cloud-rs:' + req.u.id, 2, 36e5)) return res.status(429).json({ error: 'Too many cloud restores. Please retry later.' });
+  try {
+    const r = await CloudBackup.restoreBackup(req.params.id);
+    PM.audit(req.u, 'cloud.backup.restored', r.objectKey, { revision: r.revision, preRestoreBackupCreated: true });
+    save(); await D.flushAsync();
+    res.set('Cache-Control', 'no-store').json(r);
+  } catch (e) { res.status(400).set('Cache-Control', 'no-store').json({ ok: false, error: e.message }); }
 });
 
 app.get('/api/qr', auth, async (req, res) => { res.type('image/svg+xml').send(await QRCode.toString(String(req.query.text || '').slice(0, 400) || ' ', { type: 'svg', margin: 1 })); });
@@ -410,7 +457,7 @@ app.post('/api/ai/run', auth, aiGate, (req, res) => {
   try { PM.audit(req.u, 'assistant.run', 'ai', { n: (req.body.actions || []).length }); const r = AI.aiRun(req.u, req.body.actions); save(); res.json({ results: r }); } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
 });
 app.post('/api/ai/test', auth, perm('integrations.manage'), async (req, res) => {
-  try { const k = String(req.body.key || ''); res.json(await AI.groqTest(/^\*+$/.test(k) ? '' : k)); } catch (e) { res.status(400).json({ error: e.message }); }
+  try { const k = String(req.body.key || ''); res.json(await AI.groqTest(/^\*+$/.test(k) ? '' : k, req.body.provider || AI.groqCfg().provider || 'groq')); } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 /* ---------- bank accounts (public page + open API for the public list) ---------- */
@@ -503,6 +550,15 @@ app.get(['/', '/index.html'], shellPage(SEO.portalHtml, 'portal'));
 app.get(['/login', '/login/'], (req, res) => res.redirect(302, '/?login=1'));
 app.get(['/portal', '/portal/'], shellPage((req, raw) => SEO.portalHtml(req, raw).replace(/<meta name="robots"[^>]*>/, '<meta name="robots" content="noindex,follow">'), 'portal'));
 app.get(['/app', '/app/'], shellPage((req, raw) => { const h = SEO.indexHtml(req, raw), b = Maint.bannerHtml(); return b ? h.replace(/<body[^>]*>/, m => m + b) : h; }, 'app'));
+app.get(['/admin-login', '/admin-login/'], (req, res) => {
+  if (req.u && ['admin', 'staff'].includes(req.u.role)) return res.redirect(302, '/app');
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Administrator sign in · The Umrah Store</title><style>
+  *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 12% 12%,#185744,transparent 36%),radial-gradient(circle at 90% 90%,#9a7730,transparent 30%),#071d19;font:15px/1.5 Inter,system-ui,sans-serif;color:#153027}.login{width:min(430px,100%);padding:34px;border-radius:24px;background:#fff;box-shadow:0 32px 90px rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.5)}.brand{display:flex;align-items:center;gap:12px;margin-bottom:25px}.brand img{width:56px;height:56px;object-fit:contain}.brand b{display:block;color:#073526;font:700 20px Georgia,serif}.brand small{color:#75837b}.eyebrow{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#a47b28;font-weight:800}h1{font:700 27px Georgia,serif;color:#073526;margin:7px 0 5px}.sub{color:#66766e;font-size:13px;margin-bottom:23px}label{display:block;font-size:12px;font-weight:700;color:#40594c;margin:14px 0 6px}input{width:100%;padding:13px 14px;border:1px solid #dce5df;border-radius:11px;font:inherit;outline:none}input:focus{border-color:#147653;box-shadow:0 0 0 3px rgba(20,118,83,.11)}button{width:100%;border:0;border-radius:11px;padding:13px;background:linear-gradient(120deg,#073526,#137650);color:white;font:700 14px inherit;margin-top:20px;cursor:pointer}button:disabled{opacity:.6;cursor:wait}.err{color:#b42318;background:#fff0ee;border-radius:9px;padding:9px 11px;font-size:12px;margin-top:12px;display:none}.foot{text-align:center;color:#8a958e;font-size:11px;margin-top:18px}@media(max-width:460px){.login{padding:25px 20px}}
+  </style></head><body><main class="login"><div class="brand"><img src="/brand/logo" alt=""><div><b>The Umrah Store</b><small>Internal operations portal</small></div></div><div class="eyebrow">Secure access</div><h1>Administrator sign in</h1><p class="sub">This page is exclusively for administrators and internal staff.</p><form id="f"><label for="login">Username</label><input id="login" name="login" autocomplete="username" required autofocus><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required><div class="err" id="e" role="alert"></div><button id="b" type="submit">Sign in to portal</button></form><div class="foot">The Umrah Store · Staff access</div></main><script>
+  document.getElementById('f').addEventListener('submit',async function(ev){ev.preventDefault();var b=document.getElementById('b'),e=document.getElementById('e');b.disabled=true;b.textContent='Signing in…';e.style.display='none';try{var r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login:document.getElementById('login').value,password:document.getElementById('password').value,internalOnly:true})});var j=await r.json();if(!r.ok)throw new Error(j.error||'Sign in failed');location.replace('/app')}catch(x){e.textContent=x.message;e.style.display='block';b.disabled=false;b.textContent='Sign in to portal'}});
+  </script></body></html>`;
+  res.set({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }).send(html);
+});
 
 /* ---------- app shell ---------- */
 app.use(express.static(PUB, { index: false, maxAge: '7d', setHeaders: (res, f) => { if (/\.(js|css|html)$/.test(f) && !/vendor/.test(f)) res.set('Cache-Control', 'no-cache'); } }));
@@ -521,7 +577,7 @@ async function startServer() {
   // Bring back any uploaded file that exists in MySQL but is missing on disk (e.g. after a redeploy), then migrate existing files once.
   try { await F.restoreMissing(); } catch (e) { console.error('File restore warning:', e.message); }
   F.backfill().catch(e => console.error('File migration warning:', e.message));
-  AI.init(); X.init(); sweep(); Seat.start(); Sup.start();
+  AI.init(); X.init(); sweep(); Seat.start(); Sup.start(); CloudBackup.start();
   setInterval(() => { sweep(); Chat.sweep(); const n = db.notifs.length; X.detect(); if (db.notifs.length !== n) D.save(); }, 60000).unref();
   server = app.listen(PORT, () => {
     console.log('The Umrah Store CRM v' + require('./package.json').version + ' running on port ' + PORT);

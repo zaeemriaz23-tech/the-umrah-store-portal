@@ -133,7 +133,7 @@
   const AIR = { SV: ['Saudia', '#0a6b3d'], PK: ['PIA', '#00693c'], EK: ['Emirates', '#d71920'], QR: ['Qatar Airways', '#5c0632'], EY: ['Etihad Airways', '#b8903b'], TK: ['Turkish Airlines', '#c8102e'], WY: ['Oman Air', '#8f1b2c'], GF: ['Gulf Air', '#a87c3a'], KU: ['Kuwait Airways', '#00629b'], SQ: ['Singapore Airlines', '#f0a30a'], ER: ['SereneAir', '#0a4a8a'], PA: ['AirBlue', '#0b3d91'], '9P': ['Fly Jinnah', '#a4123f'], XY: ['flynas', '#00a0df'], F3: ['flyadeal', '#e6007e'], FZ: ['flydubai', '#e2231a'], G9: ['Air Arabia', '#d7282f'], J9: ['Jazeera Airways', '#f58220'], MS: ['EgyptAir', '#00226b'], AI: ['Air India', '#e03a3e'], MH: ['Malaysia Airlines', '#c8102e'], TG: ['Thai Airways', '#5b2c83'], BG: ['Biman', '#00844e'], UL: ['SriLankan', '#00467f'], RJ: ['Royal Jordanian', '#a6192e'], ET: ['Ethiopian', '#009a49'] };
   const airName = (code, fallback) => (AIR[String(code || '').toUpperCase()] || [fallback || code || ''])[0];
   const airColor = code => (AIR[String(code || '').toUpperCase()] || [0, '#126047'])[1];
-  const airLogo = code => /^[A-Z0-9]{2}$/i.test(code || '') ? '/brand/airline/' + String(code).toUpperCase() + '.png' : '';
+  const airLogo = code => /^[A-Z0-9]{2}$/i.test(code || '') ? '/brand/airline/' + String(code).toUpperCase() + '.png?v=' + (root.TUS_AIRLINE_LOGO_V || 0) : '';
 
   const api = { OCC, occ, nightsBetween, addDaysISO, rateForDate, suggestRooms, visaTierFor, priceable, priceStay, priceQuote, withMargin, transportQuote, routeOptions, suggestVehicle, AIR, airName, airColor, airLogo };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Engine = api;
