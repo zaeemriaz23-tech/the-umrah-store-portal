@@ -14,7 +14,7 @@ const base = 'http://127.0.0.1:' + PORT;
 const call = async (p, o = {}, cookie = '') => { const r = await fetch(base + p, { redirect: 'manual', ...o, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...(o.headers || {}) } }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {} return { s: r.status, t, j, h: r.headers }; };
 const login = async (l, pw) => { const r = await call('/api/login', { method: 'POST', body: JSON.stringify({ login: l, password: pw }) }); const c = (r.h.get('set-cookie') || '').split(';')[0]; return { ...r, c }; };
 (async () => {
-  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'inherit' });
   for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise(r => setTimeout(r, 250)); }
   try {
     console.log('Normal operation');
