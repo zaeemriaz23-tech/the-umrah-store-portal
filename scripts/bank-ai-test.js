@@ -58,7 +58,7 @@ class C { constructor() { this.c = ''; }
   ok(test.s===200&&test.j.ok&&test.j.models.some(m=>m.id==='openai/gpt-oss-120b'),'admin can test an OpenRouter key and discover models');
   await A.rpc('saveSettings',{openrouter:{addKeys:['mock-openrouter-token'],model:'openai/gpt-oss-120b',visionModel:'google/gemini-2.5-flash',enabled:true,allowWrites:true,maxActions:5,temperature:.2,instructions:'Be brief'}});
   const cfg=(await A.get('/api/state')).j.settings.openrouter;
-  ok(cfg.keyCount===1&&/^\\*+token$/.test(cfg.keys[0].masked),'OpenRouter key is masked in browser state');
+  ok(cfg.keyCount===1&&/^••••••••oken$/.test(cfg.keys[0].masked),'OpenRouter key is masked in browser state');
   openrouterSeen=[];
   const r1=(await A.post('/api/ai',{q:'how are we doing',history:[{role:'user',content:'hi'}]})).j;
   ok(r1.ai&&/^Done/.test(r1.reply)&&openrouterSeen.length===2,'assistant answers using a read tool (2 OpenRouter round trips)');
