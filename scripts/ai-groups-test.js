@@ -47,8 +47,8 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
   const t=(await A.post('/api/ai/test',{key:'mock-openrouter-token'})).j;
   ok(t.ok&&t.models.some(m=>m.id==='openai/gpt-oss-20b')&&t.visionModels.some(m=>m.id==='google/gemini-2.5-flash'),'OpenRouter test discovers chat and image-capable models');
   script=[()=>say('Hello from OpenRouter')];seen=[];
-  let hello=(await A.post('/api/ai',{q:'hello'})).j;
-  ok(hello.ai&&hello.reply==='Hello from OpenRouter'&&seen[0].model==='openai/gpt-oss-120b','assistant calls the configured OpenRouter model');
+  let r=(await A.post('/api/ai',{q:'hello'})).j;
+  ok(r.ai&&r.reply==='Hello from OpenRouter'&&seen[0].model==='openai/gpt-oss-120b','assistant calls the configured OpenRouter model');
   ok(seen[0].max_tokens>0&&seen[0].tools.length>0,'OpenRouter receives CRM tool definitions using current request parameters');
 
   console.log('Group packages: permissions');
