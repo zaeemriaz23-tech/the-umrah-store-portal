@@ -43,7 +43,7 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
   console.log('OpenRouter model discovery');
   let st=(await A.get('/api/state')).j;
   ok(st.settings.openrouter.model==='openai/gpt-oss-120b','OpenRouter chat model persists from prior settings');
-  ok(st.settings.openrouter.keyCount===1&&/^\\*+oken$/.test(st.settings.openrouter.keys[0].masked),'saved OpenRouter API keys are masked in state');
+  ok(st.settings.openrouter.keyCount===1&&/^••••••••oken$/.test(st.settings.openrouter.keys[0].masked),'saved OpenRouter API keys are masked in state');
   const t=(await A.post('/api/ai/test',{key:'mock-openrouter-token'})).j;
   ok(t.ok&&t.models.some(m=>m.id==='openai/gpt-oss-20b')&&t.visionModels.some(m=>m.id==='google/gemini-2.5-flash'),'OpenRouter test discovers chat and image-capable models');
   script=[()=>say('Hello from OpenRouter')];seen=[];
