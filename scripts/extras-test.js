@@ -14,7 +14,9 @@ let pass=0,fail=0;const ok=(c,m)=>{c?pass++:fail++;console.log(c?'PASS':'FAIL',m
  // agent books -> admin notified
  const bk=(await AG.rpc('saveBooking',{category:'Custom',pax:[{n:'Test Pax',pp:'AB1234567'}],services:[{type:'hotel',title:'Hotel X',sell:1000,qty:1,from:'2030-01-01',to:'2030-01-05'}]})).j;
  ok(!!bk.id,'agent creates booking ('+JSON.stringify(bk).slice(0,60)+')');
- let st=(await A.get('/api/state')).j; ok(st.notifs.items.some(n=>/awaiting approval/.test(n.title)),'admin notified of new pending booking');
+ let st=(await A.get('/api/state')).j;
+ const submitted = st.bookings.find(x => x.id === bk.id);
+ ok(submitted && submitted.status === 'Pending' && submitted.approvalRequestedAt && submitted.approvalRequestedBy === 'Ag One' && submitted.history.some(h => /Submitted for approval/.test(h.a)), 'agent booking is explicitly submitted into the administrator approval queue'); ok(st.notifs.items.some(n=>/awaiting approval/.test(n.title)),'admin notified of new pending booking');
  await A.rpc('setStatus',{id:bk.id,status:'Confirmed'});
  let sa=(await AG.get('/api/state')).j; ok(sa.notifs.items.some(n=>/approved/i.test(n.title)),'agent notified of approval'); ok(sa.notifs.unread>=1,'agent unread count');
  await AG.rpc('markNotifs',{all:true}); sa=(await AG.get('/api/state')).j; ok(sa.notifs.unread===0,'mark all read');

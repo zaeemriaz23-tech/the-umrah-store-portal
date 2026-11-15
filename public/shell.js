@@ -26,7 +26,7 @@
     ];
     if (staff) {
       const sell = [canAny(...VPERM.search) && L('search', 'Flights & hotels', 'search'), can('groups.view') && L('groups', 'Group packages', 'layers'), can('transport.view') && L('transport', 'Transport', 'bus'), can('calculator.view') && L('calculator', 'Umrah calculator', 'terminal')];
-      const work = [canAny(...VPERM.bookings) && L('bookings', 'Bookings', 'briefcase', pend), can('queries.view') && L('queries', 'Quotes & queries', 'bell', pq), canAny(...VPERM.accounts) && L('accounts', 'Accounts', 'book'), can('payments.view') && L('payments', 'Payments', 'wallet', pp), can('rates.view') && L('rates', 'Rates & inventory', 'tag'), can('agents.create') && L('applications', 'Applications', 'users', S.appsPending || '')];
+      const work = [canAny(...VPERM.bookings) && L('bookings', 'Bookings', 'briefcase', pend), can('queries.view') && L('queries', 'Quotes & queries', 'bell', pq), can('quotations.view') && L('quotations', 'Quotations', 'file'), canAny(...VPERM.accounts) && L('accounts', 'Accounts', 'book'), can('payments.view') && L('payments', 'Payments', 'wallet', pp), can('rates.view') && L('rates', 'Rates & inventory', 'tag'), can('agents.create') && L('applications', 'Applications', 'users', S.appsPending || '')];
       const more = [can('reports.view') && L('reports', 'Reports', 'chart'), canAny(...VPERM.banking) && L('banking', 'Bank accounts', 'card'), can('chat.view') && L('chat', 'Live chat', 'chat', chat), can('support.view') && L('support', 'Support', 'ticket', tkBadge()), (can('promos.view') || can('promos.edit')) && L('promos', 'Promotions', 'tag'), (isAdmin() || can('assistant.groups')) && L('assistant', 'AI assistant', 'spark'), canAny(...VPERM.staff) && L('staff', 'Staff & access', 'shield'), canAny(...VPERM.settings) && L('settings', 'Settings', 'settings')];
       return [can('dashboard.view') && L('home', 'Dashboard', 'home'), G('sell', 'Sell', 'plane', sell), G('work', 'Manage', 'briefcase', work), G('more', 'More', 'settings', more)].filter(Boolean).filter(x => !x.items || x.items.length);
     }
@@ -73,6 +73,7 @@
     const o = [];
     if (!isSup() && !(isStaff() && !can('bookings.create'))) o.push(['href', '#/bookingform/new', 'briefcase', 'New booking', 'Travellers, services and pricing']);
     if (!isSup() && (!isStaff() || can('queries.view'))) o.push(['act', 'qNew', 'bell', 'New query', 'Ask the office for a quote']);
+    if (isStaff() && can('quotations.create')) o.push(['href', '#/quotationform/new', 'file', 'New quotation', 'Custom hotel, flight, visa and travel quote']);
     if (isStaff() && can('payments.view')) o.push(['act', 'payAdd', 'wallet', 'Record payment', 'Receipt against an account']);
     if (isStaff() && can('groups.create')) o.push(['act', 'gAdd', 'layers', 'Add group departure', 'Flights, hotels and seat prices']);
     return o;

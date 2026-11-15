@@ -1,0 +1,47 @@
+'use strict';
+// Exercises the custom IATA logo library without connecting to production or live MySQL.
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tus-airline-logo-'));
+process.env.DATA_DIR = tmp;
+process.env.CRM_TEST_MODE = '1';
+process.env.NODE_ENV = 'test';
+for (const k of Object.keys(process.env)) if (/^(DB_|MYSQL_|DATABASE_URL$)/.test(k)) delete process.env[k];
+const Logos = require('../lib/airline-logos');
+const Files = require('../lib/files');
+const PM = require('../lib/perms');
+const Engine = require('../public/engine');
+const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jcf8AAAAASUVORK5CYII=';
+try {
+  const r = Logos.save('sv', png);
+  assert.equal(r.code, 'SV');
+  assert.equal(r.mime, 'image/png');
+  assert.equal(Logos.find('SV').ext, 'png');
+  assert(Files.ok('brand/airlines/custom/SV.png'), 'custom logos are eligible for durable file mirroring');
+  assert(!Files.ok('brand/airlines/custom/SV.png.tmp'), 'temporary files cannot be mirrored');
+  assert.equal(Logos.list().length, 1);
+  const jpg = 'data:image/jpeg;base64,/9j/2Q==';
+  Logos.save('SV', jpg);
+  assert.equal(Logos.find('SV').ext, 'jpg', 'latest image format wins after a replacement');
+  assert.equal(Logos.list().length, 1, 'one airline code remains one list entry after replacement');
+  assert(!fs.existsSync(path.join(Logos.DIR, 'SV.png')), 'old image format is removed after replacement is safely written');
+  assert.throws(() => Logos.save('Saudi', png), /two-character IATA/);
+  assert.throws(() => Logos.save('EK', 'data:image/png;base64,AAAA'), /contents do not match/);
+  const staffPerm = PM.MODULES.flatMap(m => m.perms).find(p => p[0] === 'settings.airlines');
+  assert(staffPerm, 'airline management is declared in the permission catalog');
+  assert(PM.can({ id:'admin', role:'admin' }, 'settings.airlines'), 'administrator automatically has full airline-logo access');
+  assert(PM.ADMIN_ONLY.has('settings.airlines'), 'custom airline branding remains administrator-only');
+  assert.equal(PM.effective({ id:'admin', role:'admin' }).size, PM.ALL.length, 'administrator retains every permission');
+  global.TUS_AIRLINE_LOGO_V = 12345;
+  assert.equal(Engine.airLogo('SV'), '/brand/airline/SV.png?v=12345', 'logo URL changes after upload so every package refreshes its cached image');
+  const adminUi = fs.readFileSync(path.join(__dirname, '../public/v-adm.js'), 'utf8');
+  assert(adminUi.includes("['airlines', 'Airline logos', can('settings.airlines')]") && adminUi.includes('function tAirlineLogos'), 'admin settings contains the airline-logo manager');
+  assert.throws(() => PM.gate({ id:'staff-1', role:'staff', roleIds:[], grants:[], denies:[] }, 'setAirlineLogo', {}), /permission/i, 'staff without the airline permission is denied');
+  assert.throws(() => PM.gate({ id:'staff-2', role:'staff', roleIds:[], grants:['settings.airlines'], denies:[] }, 'setAirlineLogo', {}), /permission/i, 'airline branding cannot be delegated to staff');
+  assert.equal(Logos.remove('SV'), 'SV');
+  assert.equal(Logos.find('SV'), null);
+  assert.equal(Logos.list().length, 0);
+  console.log('PASS airline-logo-test: IATA validation, image signatures, durable paths, permissions and replace/remove primitives');
+} finally { fs.rmSync(tmp, { recursive: true, force: true }); }

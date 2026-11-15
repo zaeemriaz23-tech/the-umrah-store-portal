@@ -29,3 +29,26 @@ CREATE TABLE IF NOT EXISTS crm_files (
   data LONGBLOB NOT NULL,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Cloudflare R2 daily/manual backup history and persistent scheduler run keys.
+-- This table is additive and does not contain R2 credentials or file contents.
+CREATE TABLE IF NOT EXISTS crm_cloud_backup_runs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  run_key VARCHAR(90) NOT NULL,
+  kind VARCHAR(16) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  object_key VARCHAR(700) NOT NULL DEFAULT '',
+  revision BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  sha256 CHAR(64) NOT NULL DEFAULT '',
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  triggered_by VARCHAR(100) NOT NULL DEFAULT '',
+  error TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_attempt_at TIMESTAMP NULL DEFAULT NULL,
+  completed_at TIMESTAMP NULL DEFAULT NULL,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
+  UNIQUE KEY uq_crm_cloud_backup_run_key (run_key),
+  KEY idx_crm_cloud_backup_status (status, completed_at),
+  KEY idx_crm_cloud_backup_history (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

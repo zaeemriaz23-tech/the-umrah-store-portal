@@ -39,6 +39,7 @@ const pyCurrencyNote = () => { const r = pyRate(); return PY.currency === 'SAR' 
 const pyNative = base => PY.currency === 'PKR' ? (+base||0) : pyRate() > 0 ? (+base||0) / pyRate() : 0;
 const pyToBase = (amount, currency) => currency === 'PKR' ? Math.round(+amount||0) : pyRate() > 0 ? Math.round((+amount||0)*pyRate()) : 0;
 const methodFor = b => (b ? (b.kind === 'wallet' ? 'JazzCash / Easypaisa' : b.kind === 'raast' ? 'Online banking / Raast' : 'Bank transfer') : 'Cash');
+const configuredPayMethods = () => [...new Set((((S.payRules || {}).methods) || []).map(x => String(x || '').trim()).filter(Boolean))];
 const owedOf = pid => { if (isAgent()) { const w = S.wallet || {}; return { owed: Math.max(0, w.balance || 0), avail: w.available, name: S.user.name }; } const p = (S.parties || []).find(x => x.id == pid); return p ? { owed: Math.max(0, p.bal || 0), avail: p.kind === 'agent' ? (p.limit || 0) - (p.bal || 0) : null, name: p.name, supplier: p.kind === 'supplier' } : null; };
 function paySummary(pid) {
   const o = owedOf(pid); if (!o) return '<div class="pysum empty">Select an account to see what is outstanding</div>';
@@ -47,14 +48,14 @@ function paySummary(pid) {
 }
 const bankTile = (b, on) => `<button type="button" class="bkt ${on ? 'on' : ''}" data-act="pyBank" data-a="${esc(b.id)}">${BankLogo.html(b, 40)}<span><b>${esc(b.bank || b.title)}</b><small>${esc(BKIND[b.kind])}${(b.account || b.wallet || b.raast || b.iban) ? ' · …' + esc(String(b.account || b.wallet || b.raast || b.iban).replace(/\s/g, '').slice(-4)) : ''}</small></span><i>${ic('check', 'sm')}</i></button>`;
 ACT.payAdd = (pid, btn) => {
-  const staff = isStaff(), P0 = pid ? +pid : '', pr = S.payRules || { methods: ['Bank transfer', 'Cash', 'Cheque', 'Other'], quickAmounts: [] }, banks = (S.bank || []).filter(b => b.active !== false);
+  const staff = isStaff(), P0 = pid ? +pid : '', pr = S.payRules || { methods: ['Bank transfer', 'Cash', 'Cheque', 'Other'], quickAmounts: [] }, methods = configuredPayMethods(), paymentMethods = [...new Set([...(methods.length ? methods : ['Bank transfer','Cash','Cheque','Online banking / Raast','JazzCash / Easypaisa','Other']), methodFor((S.bank || []).find(b => b.id === PY.bank))])], banks = (S.bank || []).filter(b => b.active !== false);
   PY.bank = (btn && btn.dataset && btn.dataset.bank) || ''; PY.file = null; PY.currency = pyRate() > 0 ? 'SAR' : 'PKR';
   const reqR = !staff && pr.requireReceipt, reqF = !staff && pr.requireRef, who = isAgent() ? S.user.pid : P0;
   openModal({ title: 'Add payment', wide: true, body: `<div class="pyw">
   <div class="pyl"><div class="pystep"><span>1</span>Who and how much</div>
   ${staff ? fld('Account *', `<select id="py-p" data-chg="pyParty">${opts((S.parties || []).filter(p => p.active !== false).map(p => [p.id, p.name + ' (' + (p.kind === 'supplier' ? 'supplier - payment out' : p.kind + ' - receipt') + ')']), P0, 'Select account...')}</select>`) : ''}
   <div id="py-sum">${paySummary(who)}</div>
-  <div class="py-money-row">${fld('Amount *', '<input id="py-a" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" class="pybig" data-inp="pyAmount">')}${fld('Currency', `<select id="py-cur" data-chg="pyCurrency">${opts([['SAR','SAR · Saudi Riyal'],['PKR','PKR · Pakistani Rupee']], PY.currency)}</select>`)}</div><div id="py-cur-note" class="hint py-currency-note">${esc(pyCurrencyNote())}</div>
+  <div class="py-money-row">${fld('Amount *', '<input id="py-a" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" class="pybig" data-inp="pyAmount">')}${fld('Currency', `<select id="py-cur" data-chg="pyCurrency">${opts([['SAR','SAR · Saudi Riyal'],['PKR','PKR · Pakistani Rupee']], PY.currency)}</select>`)}</div><div id="py-cur-note" class="hint py-currency-note">${esc(pyCurrencyNote())}</div>${fld('Payment method *', `<select id="py-m">${opts(paymentMethods, methodFor(banks.find(b => b.id === PY.bank)))}</select>`)}
   ${(pr.quickAmounts || []).length ? `<div class="chips">${pr.quickAmounts.map(n => `<button type="button" class="chip" data-act="pyAmt" data-a="${n}">${esc(CUR && CUR.fmtNative ? CUR.fmtNative(pyNative(n), PY.currency) : 'PKR '+fnum(n))}</button>`).join('')}</div>` : ''}
   ${fld('Against booking (optional)', `<select id="py-b" data-chg="pyBook">${bookOpts(who)}</select>`)}
   </div>
@@ -63,7 +64,7 @@ ACT.payAdd = (pid, btn) => {
   <div class="pystep" style="margin-top:14px"><span>3</span>Proof</div>
   <label class="drop" id="py-drop"><input id="py-f" type="file" accept="image/*,.pdf" class="hide" data-chg="pyFile"><span id="py-fn">${ic('upload')}<b>${reqR ? 'Receipt required - ' : ''}Tap to add receipt</b><small>Photo or PDF, max 6 MB</small></span></label>
   ${fld('Reference / transaction ID' + (reqF ? ' *' : ''), '<input id="py-r" placeholder="Optional but speeds up approval">')}
-  <details class="more"><summary>More details</summary><div class="g1" style="margin-top:10px"><div class="g2">${fld('Date', `<input id="py-d" type="date" value="${todayISO()}">`)}${fld('Method', `<select id="py-m">${opts(pr.methods, methodFor(banks.find(b => b.id === PY.bank)))}</select>`)}</div>${fld('Note', '<input id="py-n">')}</div></details></div>
+  <details class="more"><summary>More details</summary><div class="g1" style="margin-top:10px"><div class="g1">${fld('Transaction date', `<input id="py-d" type="date" value="${todayISO()}">`)}</div>${fld('Note', '<input id="py-n">')}</div></details></div>
   </div><p class="hint" style="margin-top:12px">${staff ? 'Recorded by staff - ' + (can('payments.approve') ? 'posts to the ledger immediately.' : 'goes to the approval queue.') : (pr.autoApproveUnder > 0 ? 'Receipts up to ' + fmt(pr.autoApproveUnder) + ' post to your ledger instantly; larger ones after the office approves.' : 'Posted to your ledger as soon as the office approves it.')}</p>`, foot: '<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn pri" data-act="paySave">Save payment</button>' });
 };
 CHG.pyParty = v => { const b = $('#py-b'); if (b) b.innerHTML = bookOpts(+v); const s = $('#py-sum'); if (s) s.innerHTML = paySummary(+v); };
@@ -72,7 +73,7 @@ CHG.pyCurrency = (v) => { if (!['SAR','PKR'].includes(v)) return; const input=$(
 INP.pyAmount = () => { const note=$('#py-cur-note'); if(note)note.textContent=pyCurrencyNote(); };
 ACT.pyFull = n => { $('#py-a').value = pyNative(+n||0).toFixed(PY.currency==='SAR'?2:0); };
 ACT.pyAmt = n => { $('#py-a').value = pyNative(+n||0).toFixed(PY.currency==='SAR'?2:0); };
-ACT.pyBank = id => { PY.bank = id; $$('#py-banks .bkt').forEach(c => c.classList.toggle('on', c.dataset.a === id)); const b = (S.bank || []).find(x => x.id === id), m = $('#py-m'); if (m) m.value = methodFor(b); };
+ACT.pyBank = id => { PY.bank = id; $$('#py-banks .bkt').forEach(c => c.classList.toggle('on', c.dataset.a === id)); const b = (S.bank || []).find(x => x.id === id), m = $('#py-m'); if (m) { const base = configuredPayMethods(); const all = [...new Set([...(base.length ? base : ['Bank transfer','Cash','Cheque','Online banking / Raast','JazzCash / Easypaisa','Other']), methodFor(b)])]; m.innerHTML = opts(all, methodFor(b)); } };
 CHG.pyFile = (v, t) => { const f = t.files[0]; PY.file = f || null; const n = $('#py-fn'); if (!f) return; if (f.size > 6e6) { PY.file = null; t.value = ''; return toast('Receipt too large (max 6 MB)', true); } n.innerHTML = /^image\//.test(f.type) ? `<img src="${URL.createObjectURL(f)}" class="pv" alt=""><small>${esc(f.name)} · tap to change</small>` : `${ic('file')}<b>${esc(f.name)}</b><small>tap to change</small>`; };
 ACT.paySave = async (a, b) => {
   const f = PY.file; let file; if (f) file = { name: f.name, data: await readFile(f) };
