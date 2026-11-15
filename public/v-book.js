@@ -216,14 +216,21 @@ ACT.bfApplyVoucher = () => {
 };
 
 ACT.bfSave = async (a, btn) => {
+  if (!BF || BF.saving) return;
+  BF.saving = true;
   BF.services.forEach((s, i) => { if (s.type === 'hotel' && s.d.qtyMode !== 'manual') syncHotelUnits(i); });
   const body = { ...BF, services: BF.services.map(s => ({ ...s, from: sfrom(s), to: sto(s) })) };
   busy(btn, true);
   try { const r = await rpc('saveBooking', body); toast((BF.id ? 'Booking updated ' : 'Booking created ') + r.no); await load(); BF = null; go('booking', r.id); }
   catch (e) {
+    if ((e.dup || e.limit || e.seats) && isStaff()) {
+      const yes = await confirmBox(e.dup ? 'Similar booking exists' : e.seats ? 'Not enough seats' : 'Limit exceeded', esc(e.message) + '<br><br>Create it anyway?', 'Create anyway', true);
+      if (yes && BF) { BF.force = true; BF.saving = false; return ACT.bfSave(a, btn); }
+    }
+    if (BF) BF.saving = false;
     busy(btn, false);
-    if ((e.dup || e.limit || e.seats) && isStaff()) { if (await confirmBox(e.dup ? 'Similar booking exists' : e.seats ? 'Not enough seats' : 'Limit exceeded', esc(e.message) + '<br><br>Create it anyway?', 'Create anyway', true)) { BF.force = true; return ACT.bfSave(a, btn); } }
-    else { const bx = $('#bf-err'); if (bx) { bx.innerHTML = `<div class="errbox">${ic('alert')} ${esc(e.message)}${e.dupNo ? ` <a href="#/bookings" data-act="dupGo" data-a="${esc(e.dupNo)}"><u>Open ${esc(e.dupNo)}</u></a>` : ''}</div>`; bx.scrollIntoView({ behavior: 'smooth', block: 'center' }); } toast(e.message, true); }
+    const bx = $('#bf-err'); if (bx) { bx.innerHTML = `<div class="errbox">${ic('alert')} ${esc(e.message)}${e.dupNo ? ` <a href="#/bookings" data-act="dupGo" data-a="${esc(e.dupNo)}"><u>Open ${esc(e.dupNo)}</u></a>` : ''}</div>`; bx.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    toast(e.message, true);
   }
 };
 ACT.dupGo = no => { UI.f.bookings = { q: no }; };

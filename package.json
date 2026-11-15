@@ -1,6 +1,6 @@
 {
   "name": "umrah-store-crm",
-  "version": "3.20.0",
+  "version": "3.23.1",
   "description": "The Umrah Store - B2B/B2C travel CRM: bookings, vouchers, ledgers, payments, queries, Travelport flight and hotel search",
   "private": true,
   "main": "server.js",

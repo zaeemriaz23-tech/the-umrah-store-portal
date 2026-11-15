@@ -30,5 +30,5 @@ eq(E.suggestVehicle(E.routeOptions('r1', veh, pr), 12).name, 'Bus', 'suggest veh
 q = E.priceQuote({ ...inp(base({ transports: [{ routeId: 'r1', vehicleId: 'v1', roundTrip: true, count: 1 }] })), routes: rt, vehicles: veh, prices: pr });
 eq(q.lines.find(l => l.kind === 'transport').sar, 400, 'transport line in quote (4 pax, no surcharge, return)');
 eq(E.withMargin(100000, 4, '%', 10), { margin: 10000, total: 110000, per: 27500 }, 'margin %'); eq(E.withMargin(100000, 4, 'PKR', 500).total, 102000, 'margin per head');
-eq(E.airLogo('sv'), '/brand/airline/SV.png', 'airline logo url'); eq(E.airLogo('x'), '', 'bad code rejected');
+eq(E.airLogo('sv'), '/brand/airline/SV.png?v=0', 'airline logo url'); eq(E.airLogo('x'), '', 'bad code rejected');
 console.log(bad ? '\n' + bad + ' FAILED' : '\nAll engine tests passed'); process.exit(bad ? 1 : 0);
