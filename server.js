@@ -456,8 +456,9 @@ app.post('/api/ai', auth, aiGate, async (req, res) => {
 app.post('/api/ai/run', auth, aiGate, (req, res) => {
   try { PM.audit(req.u, 'assistant.run', 'ai', { n: (req.body.actions || []).length }); const r = AI.aiRun(req.u, req.body.actions); save(); res.json({ results: r }); } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
 });
-app.post('/api/ai/test',auth,adminOnlyEarly,async(req,res)=>{try{const k=String(req.body.key||'');res.json(await AI.testOpenRouter(/^\*+$/.test(k)?'':k));}catch(e){res.status(400).json({error:e.message});}});
-app.post('/api/ai/key/remove',auth,adminOnlyEarly,(req,res)=>{try{const r=OPS.removeOpenRouterKey(req.u,str(req.body.id,80));save();res.json(r);}catch(e){res.status(e.status||400).json({error:e.message});}});
+const aiAdminOnly=(req,res,next)=>req.u&&req.u.role==='admin'?next():res.status(req.u?403:401).json({error:'Only an administrator can manage OpenRouter API keys'});
+app.post('/api/ai/test',auth,aiAdminOnly,async(req,res)=>{try{const k=String(req.body.key||'');res.json(await AI.testOpenRouter(/^\*+$/.test(k)?'':k));}catch(e){res.status(400).json({error:e.message});}});
+app.post('/api/ai/key/remove',auth,aiAdminOnly,(req,res)=>{try{const r=OPS.removeOpenRouterKey(req.u,str(req.body.id,80));save();res.json(r);}catch(e){res.status(e.status||400).json({error:e.message});}});
 
 /* ---------- bank accounts (public page + open API for the public list) ---------- */
 
