@@ -1,0 +1,145 @@
+/* The Umrah Store — homepage art direction. Scoped to the public home screen only. */
+body[data-page=home]{
+  --blue:#0d5a42;--blue2:#0a3d2d;--blue-soft:#f4f1e8;--sky:#ad8b4d;
+  --ink:#10281e;--tx:#40554a;--mute:#718077;--faint:#97a39a;
+  --bg:#f7f6f0;--line:#e8e5db;--line2:#f0eee7;
+  --green:#176b49;--greenb:#eaf3ed;--navy:#092d21;--navy2:#0d4a40;
+  background:#f7f6f0;color:#40554a;
+}
+body[data-page=home] .scene{
+  height:900px;
+  background:radial-gradient(ellipse at 78% 27%,rgba(191,151,79,.18),transparent 34%),linear-gradient(132deg,#061f17 0%,#0a3425 48%,#104c36 100%);
+}
+body[data-page=home] .scene::before{
+  background:linear-gradient(90deg,rgba(4,24,17,.88) 0%,rgba(5,31,21,.68) 40%,rgba(7,43,29,.18) 78%),linear-gradient(180deg,rgba(2,18,13,.2),transparent 40%);
+}
+body[data-page=home] .scene::after{height:180px;background:linear-gradient(180deg,transparent,#f7f6f0)}
+body[data-page=home] .scene svg{opacity:.88;filter:saturate(.78)}
+body[data-page=home] .nav-wrap{padding:17px 24px 0}
+body[data-page=home] .nav{
+  height:66px;max-width:1280px;border-radius:17px;padding:0 12px 0 20px;gap:18px;
+  background:rgba(5,35,24,.62);border:1px solid rgba(225,199,143,.24);
+  box-shadow:0 12px 34px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.09);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+}
+body[data-page=home] .brand .mark{border-radius:11px;border:1px solid rgba(200,157,76,.55);box-shadow:none}
+body[data-page=home] .brand small{letter-spacing:.07em;text-transform:uppercase;font-size:9.5px;color:#e5d3a8}
+body[data-page=home] .nav .links{gap:3px}
+body[data-page=home] .nav .links a.l{font-size:13.5px;font-weight:600;padding:9px 11px;color:rgba(255,255,255,.88)}
+body[data-page=home] .nav .links a.l:hover{background:rgba(255,255,255,.1);color:#fff}
+body[data-page=home] .nav .sep{background:rgba(229,211,168,.34)}
+body[data-page=home] .pill{font-weight:700;letter-spacing:.005em}
+body[data-page=home] .pill.white{background:#f9f7ef;color:#174532;box-shadow:0 3px 12px rgba(0,0,0,.13)}
+body[data-page=home] .nav .pill.blue{background:#c8a15b!important;color:#1c261d!important;box-shadow:0 5px 14px rgba(0,0,0,.18)}
+body[data-page=home] .nav .pill.blue:hover{background:#d9b876!important}
+body[data-page=home] .hero{max-width:1280px;padding:88px 30px 0;min-height:760px}
+body[data-page=home] .eyebrow{color:#e8d3a4;letter-spacing:.16em;font-size:11px}
+body[data-page=home] .eyebrow i{width:31px;height:1px;border-radius:0;background:#c9a45f;box-shadow:none}
+body[data-page=home] .hero h1{
+  max-width:780px;margin-top:23px;font-size:clamp(44px,5.2vw,66px);
+  line-height:1.035;letter-spacing:-.045em;font-weight:800;text-shadow:0 3px 26px rgba(0,0,0,.2);
+}
+body[data-page=home] .hero p.sub{max-width:540px;margin-top:19px;color:rgba(249,248,241,.84);font-size:16.5px;line-height:1.7}
+body[data-page=home] .hero .sbox{margin-top:66px}
+body[data-page=home] .sbox{max-width:1160px}
+body[data-page=home] .stab{background:#fbfaf6;padding:12px 30px 14px;border-radius:14px 14px 0 0;box-shadow:0 -5px 20px rgba(0,0,0,.08)}
+body[data-page=home] .stab button{font-size:14px;letter-spacing:.01em;color:#6e7a70}
+body[data-page=home] .stab button.on{color:#14553d;box-shadow:inset 0 -2px 0 #c49a50}
+body[data-page=home] .scard{border:1px solid rgba(200,157,76,.22);border-radius:15px;background:#fffefa;padding:25px 30px 17px;box-shadow:0 25px 65px -22px rgba(0,0,0,.45)}
+body[data-page=home] .seg{background:#f3f2ec;border-radius:9px}
+body[data-page=home] .seg button.on{color:#154d37;background:#fff;box-shadow:0 1px 4px rgba(21,45,32,.1)}
+body[data-page=home] .f .lab,body[data-page=home] .f label{color:#77847a}
+body[data-page=home] .f .big{font-size:19px;color:#142b21}
+body[data-page=home] .f.add .big{color:#145b40}
+body[data-page=home] .go,body[data-page=home] button.go{
+  background:#c8a15b;color:#1b281f;box-shadow:0 8px 20px -9px rgba(169,128,53,.7);border-radius:10px;
+}
+body[data-page=home] .go:hover,body[data-page=home] button.go:hover{background:#d9b978}
+body[data-page=home] .swap{color:#15553d;border-color:#e7e2d4}
+body[data-page=home] .sec{max-width:1280px;padding:78px 30px 0}
+body[data-page=home] .sec h2{font-size:clamp(27px,3.1vw,38px);letter-spacing:-.035em;line-height:1.12;max-width:700px}
+body[data-page=home] .sec .lead{font-size:15.5px;line-height:1.7;color:#758178}
+body[data-page=home] .routes{gap:13px;margin-top:26px}
+body[data-page=home] .route{padding:18px 19px;border-radius:13px;background:#fffefa;border-color:#e9e5da;box-shadow:0 5px 20px rgba(25,51,36,.035)}
+body[data-page=home] .route:hover{border-color:#c9ae76;box-shadow:0 13px 28px -17px rgba(58,68,42,.32);transform:translateY(-2px)}
+body[data-page=home] .route .cc{font-size:18px;color:#173e2c}
+body[data-page=home] .route .cc svg{color:#b18b49}
+body[data-page=home] .route small{color:#7b867c}
+body[data-page=home] .route .go2{background:#f2eee3;color:#795c2a}
+body[data-page=home] .feat{gap:14px;margin-top:28px}
+body[data-page=home] .fc{padding:28px;border-radius:15px;background:#fffefa;border-color:#e9e5db}
+body[data-page=home] .fc.dark{background:linear-gradient(145deg,#0b3827,#104d37 72%,#164b37);}
+body[data-page=home] .fc .ic{background:#f3efe3;color:#8b6b35;border-radius:12px}
+body[data-page=home] .fc.dark .ic{background:rgba(255,255,255,.12);color:#e8d3a4}
+body[data-page=home] .fc h3{font-size:20px;letter-spacing:-.02em}
+body[data-page=home] .fc p{font-size:14px;line-height:1.7}
+body[data-page=home] .fc.dark p{color:#d2dfd6}
+body[data-page=home] .fc .tags span{background:rgba(239,224,189,.13);color:#f1e5cb;border:1px solid rgba(239,224,189,.12)}
+body[data-page=home] .st::before{background:#c8a15b;color:#1b281f;box-shadow:0 0 0 6px #f7f6f0}
+body[data-page=home] .st::after{background:repeating-linear-gradient(90deg,#d8c9a7 0 6px,transparent 6px 12px)}
+body[data-page=home] .st h3{font-size:18px;color:#1c3829}
+body[data-page=home] .st p{font-size:14px;line-height:1.7}
+body[data-page=home] .tools{gap:13px;margin-top:26px}
+body[data-page=home] .tool{padding:19px;border-radius:13px;background:#fffefa;border-color:#e9e5db}
+body[data-page=home] .tool:hover{border-color:#c9ae76;box-shadow:0 10px 24px rgba(25,51,36,.06)}
+body[data-page=home] .tool .ic{background:#f3efe3;color:#8b6b35;border-radius:11px}
+body[data-page=home] .tool b{color:#173e2c;font-size:14px}
+body[data-page=home] .tool span{font-size:12.5px;line-height:1.5}
+body[data-page=home] .cta{margin:78px auto 0;max-width:1220px;border-radius:17px;padding:48px 46px;background:linear-gradient(115deg,#08291d,#0d4732 72%,#15523a)!important;border:1px solid rgba(199,160,92,.26);box-shadow:0 18px 45px -28px rgba(7,38,25,.55)}
+body[data-page=home] .cta h2{font-size:clamp(26px,3vw,35px);letter-spacing:-.03em}
+body[data-page=home] .cta p{font-size:14.5px;line-height:1.7;color:#d5e1d7}
+body[data-page=home] .cta .pill.white{background:#c8a15b;color:#1b281f;box-shadow:none}
+body[data-page=home] .cta .pill.ghost{border-color:rgba(241,225,192,.42);background:transparent;color:#fff}
+body[data-page=home] .cta .pill.ghost:hover{background:rgba(255,255,255,.1)}
+body[data-page=home] .deps{padding-top:54px}
+body[data-page=home] .dep{border-radius:14px;background:#fffefa;border-color:#e9e5db;box-shadow:0 7px 22px rgba(24,47,34,.04)}
+body[data-page=home] .dep:hover{border-color:#c9ae76}
+body[data-page=home] .depc{background:#f1eee5;color:#746344}
+body[data-page=home] .dep .ok{background:#eaf3ed;color:#176b49}
+body[data-page=home] .dep .low{background:#fbf1dc;color:#906b26}
+body[data-page=home] .dep .so{background:#fbe9e6;color:#a84237}
+body[data-page=home] .phead h2{color:#183b2a}
+body[data-page=home] .pbadge{background:#f5efdf;color:#82652f}
+body[data-page=home] .pc{border-radius:14px;background:#fffefa;border-color:#e9e5db;box-shadow:0 8px 28px -15px rgba(24,47,34,.24)}
+body[data-page=home] .pc:hover{box-shadow:0 15px 32px -15px rgba(24,47,34,.32)}
+body[data-page=home] .pc .pi.ph{background:linear-gradient(135deg,#0b3827,#15523a)}
+body[data-page=home] .help{margin-top:58px}
+body[data-page=home] .helpin{border-radius:15px;background:#fffefa;border-color:#e9e5db;box-shadow:0 8px 28px rgba(24,47,34,.045)}
+body[data-page=home] .helpin h2{color:#173e2c}
+body[data-page=home] .helpb .pill.wa{background:#1d8755}
+body[data-page=home] footer{margin-top:64px;background:#061f17;color:#c4d3c8;padding:48px 28px 30px}
+body[data-page=home] footer h4{color:#e8d3a4}
+body[data-page=home] footer a,body[data-page=home] footer p{color:#c4d3c8}
+body[data-page=home] footer a:hover{color:#fff}
+@media(max-width:980px){
+  body[data-page=home] .hero{padding-top:66px;min-height:700px}
+  body[data-page=home] .hero .sbox{margin-top:54px}
+  body[data-page=home] .sec{padding-top:62px}
+  body[data-page=home] .cta{margin-inline:18px}
+}
+@media(max-width:860px){
+  body[data-page=home] .nav-wrap{padding:12px 14px 0}
+  body[data-page=home] .nav{height:58px;border-radius:15px;padding-inline:12px}
+  body[data-page=home] .hero{padding:55px 20px 0;min-height:650px}
+  body[data-page=home] .hero h1{font-size:clamp(38px,7vw,55px)}
+  body[data-page=home] .hero .sbox{margin-top:42px}
+  body[data-page=home] .scard{padding:20px 18px 14px}
+}
+@media(max-width:640px){
+  body[data-page=home] .nav-wrap{padding:10px 10px 0}
+  body[data-page=home] .nav{height:56px;border-radius:13px}
+  body[data-page=home] .hero{padding:48px 16px 0;min-height:0;padding-bottom:52px}
+  body[data-page=home] .hero h1{font-size:clamp(35px,9vw,43px);line-height:1.06}
+  body[data-page=home] .hero p.sub{font-size:15px;max-width:100%}
+  body[data-page=home] .hero .sbox{margin-top:34px}
+  body[data-page=home] .stab{padding:10px 18px 12px}
+  body[data-page=home] .scard{padding:16px 13px 12px;border-radius:12px}
+  body[data-page=home] .sec{padding:52px 16px 0}
+  body[data-page=home] .sec h2{font-size:28px}
+  body[data-page=home] .routes,body[data-page=home] .tools{grid-template-columns:1fr}
+  body[data-page=home] .fc{padding:22px}
+  body[data-page=home] .cta{margin:52px 12px 0;padding:30px 22px;border-radius:14px}
+  body[data-page=home] .cta .acts{margin-left:0;width:100%}
+  body[data-page=home] .cta .acts .pill{flex:1}
+  body[data-page=home] footer{padding-inline:18px}
+}

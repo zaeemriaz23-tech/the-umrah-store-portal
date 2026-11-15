@@ -1,0 +1,57 @@
+"""Browser smoke test (needs: pip install playwright && playwright install chromium). Usage: python3 scripts/ui-smoke.py PORT
+Boots nothing itself: start the server first with an empty DATA_DIR and ADMIN_PASSWORD='AdminPass#1'."""
+import sys, datetime
+from playwright.sync_api import sync_playwright
+port = sys.argv[1]; res = []
+def ok(c, m): res.append(bool(c)); print(('  PASS ' if c else '  FAIL ') + m)
+def iso(n): return (datetime.date.today() + datetime.timedelta(days=n)).isoformat()
+with sync_playwright() as p:
+    b = p.chromium.launch(); pg = b.new_page(viewport={'width': 1440, 'height': 900}); errs = []
+    pg.on('console', lambda m: errs.append(m.text) if m.type == 'error' and 'ERR_NAME' not in m.text and 'Failed to load resource' not in m.text else None)
+    pg.on('pageerror', lambda e: errs.append('PAGEERR ' + str(e)))
+    pg.goto(f'http://127.0.0.1:{port}/app', wait_until='networkidle')
+    pg.fill('input[autocomplete=username], input[name=login], #lg_login, input[type=text]', 'admin'); pg.fill('input[type=password]', 'AdminPass#1'); pg.keyboard.press('Enter'); pg.wait_for_timeout(1200)
+    pg.evaluate("""async()=>{ await rpc('saveSettings',{bank:[
+      {kind:'bank',bank:'Meezan Bank',title:'Umrah Store',account:'0101-2345678',currency:'PKR',vis:'public',order:1,active:true},
+      {kind:'bank',bank:'HBL',title:'Umrah Store USD',account:'5000-77881',currency:'USD',vis:'agents',order:2,active:true},
+      {kind:'wallet',bank:'JazzCash',title:'Umrah Store',wallet:'03131234567',currency:'PKR',vis:'staff',order:3,active:false}]}); await refresh(); }""")
+    print('Bank filters work on real records')
+    pg.evaluate("location.hash='#/banking'"); pg.wait_for_timeout(700)
+    cnt = lambda: pg.locator('#bkList .bkc, #bkList .bkr').count()
+    ok(cnt() == 3, 'all 3 accounts listed')
+    pg.fill('#bkQ', 'hbl'); pg.wait_for_timeout(200); ok(cnt() == 1, 'search "hbl" narrows to 1')
+    pg.fill('#bkQ', ''); pg.select_option('#bkCur', 'USD'); pg.wait_for_timeout(200); ok(cnt() == 1, 'currency USD narrows to 1')
+    ok('USD' in pg.inner_text('#bkList') and pg.locator('#bkList .chip.on').count() >= 1, 'active filter indicator shown')
+    pg.click('text=Clear all'); pg.wait_for_timeout(300); ok(cnt() == 3, 'Clear all restores everything')
+    pg.select_option('#bkSt', 'inactive'); pg.wait_for_timeout(200); ok(cnt() == 1, 'status Inactive shows the hidden wallet')
+    pg.select_option('#bkSt', ''); pg.select_option('#bkVis', 'staff'); pg.wait_for_timeout(200); ok(cnt() == 1, 'visibility Staff-only filter works')
+    pg.select_option('#bkVis', ''); pg.click('.vt button[data-a=list]'); pg.wait_for_timeout(200); ok(pg.locator('#bkList .bkr').count() == 3, 'list view works')
+    print('Add and edit an account')
+    pg.click('text=Add account'); pg.wait_for_selector('#modal'); pg.click('#modal button[data-act=bkSave]'); pg.wait_for_timeout(300)
+    ok(pg.locator('#modal').count() == 1, 'saving an empty form is refused (modal stays open)')
+    pg.fill('#modal [data-bk=bank]', 'Allied Bank'); pg.fill('#modal [data-bk=title]', 'Umrah Store'); pg.fill('#modal [data-bk=iban]', 'pk 11 abpa 0000 1234'); pg.select_option('#modal [data-bk=vis]', 'agents')
+    pg.click('#modal button[data-act=bkSave]'); pg.wait_for_timeout(900)
+    ok(pg.locator('#modal').count() == 0, 'valid account saves and closes')
+    saved = pg.evaluate("S.bank.find(b=>b.bank==='Allied Bank')")
+    ok(saved and saved['iban'] == 'PK11ABPA00001234' and saved['vis'] == 'agents', 'IBAN normalised and visibility stored')
+    print('Services: switching hotels + flights off hides navigation, data kept')
+    pg.evaluate("location.hash='#/services'"); pg.wait_for_timeout(600)
+    for k in ('hotels', 'flights', 'reports'): pg.evaluate(f"document.querySelector('[data-mod={k}]').checked=false")
+    pg.click('text=Save services'); pg.wait_for_timeout(900)
+    nav = pg.inner_text('#nav')
+    ok('Flights & hotels' not in nav or not pg.locator('#nav a[href="#/search"]').is_visible(), 'Flights & hotels removed from navigation')
+    ok(not pg.locator('#nav a[href="#/reports"]').is_visible(), 'Reports removed from navigation')
+    ok(pg.locator('#nav a[href="#/groups"]').is_visible(), 'other services unaffected')
+    ok(pg.evaluate("S.bank.length") == 4, 'stored records untouched')
+    pg.evaluate("location.hash='#/search'"); pg.wait_for_timeout(500); ok('switched off' in pg.inner_text('#page'), 'direct link shows a clear "switched off" page')
+    pg.evaluate("location.hash='#/services'"); pg.wait_for_timeout(500)
+    for k in ('hotels', 'flights', 'reports'): pg.evaluate(f"document.querySelector('[data-mod={k}]').checked=true")
+    pg.click('text=Save services'); pg.wait_for_timeout(800); ok(pg.locator('#nav a[href="#/search"]').is_visible(), 'switching back on restores navigation')
+    print('Brand filter + seat sync screens')
+    pg.evaluate("UI.setTab='x'"); pg.click('text=Brand filter'); pg.wait_for_timeout(300); pg.click('text=Preview'); pg.wait_for_timeout(500)
+    ok('Meezab' not in pg.inner_text('#bfOut') and 'The Umrah Store' in pg.inner_text('#bfOut'), 'brand preview replaces the supplier name')
+    pg.click('button:has-text("Seat sync")'); pg.wait_for_timeout(400); ok('Not configured' in pg.inner_text('#page'), 'unconfigured seat sync explains what to set on the server')
+    ok(pg.locator('button:has-text("Sync now")').is_disabled(), 'Sync now is disabled until configured')
+    ok(not errs, 'no console or page errors: ' + str(errs[:3]))
+    pg.screenshot(path='/tmp/ui_sync.png'); b.close()
+print(f"\n{sum(res)}/{len(res)} passed"); sys.exit(0 if all(res) else 1)

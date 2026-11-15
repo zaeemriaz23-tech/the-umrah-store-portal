@@ -1,0 +1,13 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+const core = read('public/core.js'), view = read('public/v-adm.js'), css = read('public/tus.css');
+assert.match(core, /\['admin', 'Admin centre', 'grid'\]/, 'admin-only navigation entry exists');
+assert.match(view, /VIEWS\.admin\s*=\s*\{\s*roles:\s*\['admin'\]/, 'Admin Centre is restricted to administrators');
+for (const token of ['Platform status', 'Supplier inventory sync', 'Storage &amp; restore points', 'Recent admin activity', 'Create restore point']) assert.ok(view.includes(token), 'Admin Centre includes ' + token);
+assert.match(view, /\/api\/storage\/status/, 'health reads existing storage status API');
+assert.match(view, /\/api\/backups/, 'restore point action uses existing backup API');
+assert.match(css, /@media\(max-width:760px\)\{\.ac-hero/, 'Admin Centre has mobile layout rules');
+console.log('PASS admin-centre-test: admin-only route, KPIs, sync health, storage, restore-point action, audit and responsive layout');

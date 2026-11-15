@@ -1,0 +1,26 @@
+/* The Umrah Store v5 - public landing + agent sign-in: same identity as the CRM (Zamzam), loaded after portal.css */
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');
+:root{--navy:#08211d;--navy2:#0d4a40;--blue:#0f6a5c;--blue2:#0d4a40;--blue-soft:#eef7f4;--sky:#3aa88f;--ink:#0d1c19;--tx:#2b3d38;--bg:#f2f5f3;--font:'Hanken Grotesk','Plus Jakarta Sans',system-ui,sans-serif;--disp:'Bricolage Grotesque','Hanken Grotesk',system-ui,sans-serif;--sand:#c8962f;--sand-l:#efd9a4}
+body{font-family:var(--font)}
+h1,h2,h3,.hero h1{font-family:var(--disp)}
+.hero h1{font-weight:800;letter-spacing:-.04em;max-width:820px}
+.hero p.sub{max-width:560px;font-size:18px}
+.eyebrow{letter-spacing:.14em}
+.pill.blue,.btn.pri,.sbox-host .go,button.go{background:var(--sand)!important;color:#1b1405!important}
+.deps{max-width:1280px;margin:0 auto;padding:56px 28px 8px}
+.dephead{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-end;margin-bottom:22px}
+.dephead h2{margin:0;font-size:clamp(26px,3vw,36px);letter-spacing:-.03em}.dephead .lead{margin:6px 0 0}
+.pill.ghost2{background:#fff;color:var(--ink);border:1px solid #dfe6e2}.pill.ghost2:hover{background:#f1f6f4}
+.depgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.dep{display:flex;flex-direction:column;gap:12px;padding:18px 20px;background:#fff;border:1px solid #e2e8e5;border-radius:20px;color:var(--ink);transition:transform .15s,box-shadow .2s,border-color .2s}
+.dep:hover{transform:translateY(-3px);box-shadow:0 22px 40px -24px rgba(8,33,29,.45);border-color:#bfe0d5}
+.deph{display:flex;justify-content:space-between;align-items:center;gap:10px}.deph b{font-family:var(--disp);font-size:18px;letter-spacing:-.02em}
+.depc{font-size:11.5px;font-weight:800;letter-spacing:.08em;color:#6a7d76;background:#f0f4f2;border-radius:99px;padding:3px 9px}
+.depd{font-size:15px;font-weight:650}.depd i{font-style:normal;color:var(--sand);margin:0 4px}
+.depf{display:flex;justify-content:space-between;align-items:center;color:#5d726b;font-size:13px;border-top:1px solid #eef2f0;padding-top:12px}
+.depf em{font-style:normal;font-weight:800;border-radius:99px;padding:4px 11px;font-size:12.5px}
+.depf .ok{background:#e3f4ee;color:#0d4a40}.depf .low{background:#fbf0d6;color:#8a5a06}.depf .so{background:#fde8e6;color:#b42318}
+.dep.out{opacity:.72}
+.feat .fc.dark{background:linear-gradient(150deg,#08211d,#0d4a40)}
+.cta{background:linear-gradient(135deg,#08211d,#0d4a40)!important}
+@media(max-width:640px){.deps{padding:36px 18px 4px}.hero h1{font-size:38px}}

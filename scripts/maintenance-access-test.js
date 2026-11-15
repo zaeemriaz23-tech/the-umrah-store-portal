@@ -1,0 +1,13 @@
+'use strict';
+const assert = require('assert');
+const D = require('../lib/db');
+const Maint = require('../lib/maintenance');
+D.db.settings.maintenance = { on: true, allowStaff: false, title: 'Testing' };
+assert.strictEqual(Maint.allows({ role: 'admin' }), true, 'admin always has access');
+assert.strictEqual(Maint.get().allowStaff, true, 'legacy staff access flag is normalised on');
+assert.strictEqual(Maint.allows({ role: 'staff' }), true, 'internal staff always have access even with legacy allowStaff=false');
+assert.strictEqual(Maint.allows({ role: 'agent' }), false, 'agents are blocked during maintenance');
+assert.strictEqual(Maint.allows({ role: 'supplier' }), false, 'suppliers are blocked during maintenance');
+assert.strictEqual(Maint.allows(null), false, 'anonymous users are not authenticated');
+assert.match(Maint.bannerHtml(), /Administrators and internal staff retain access/);
+console.log('PASS maintenance access policy: admin/staff allowed; agent/supplier/anonymous blocked');
