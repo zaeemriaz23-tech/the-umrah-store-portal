@@ -1,17 +1,16 @@
 'use strict';
-/* Group packages and permission-aware AI tools against a local Groq mock. Run: node scripts/ai-groups-test.js */
+/* Group packages and permission-aware AI tools against a local OpenRouter mock. Run: node scripts/ai-groups-test.js */
 const { spawn } = require('child_process'); const http = require('http'); const fs = require('fs'); const os = require('os'); const path = require('path');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crm3-')), PORT = 3900 + Math.floor(Math.random() * 90), B = 'http://127.0.0.1:' + PORT;
 let pass = 0, failN = 0; const ok = (c, m) => { if (c) { pass++; console.log('  PASS', m); } else { failN++; console.log('  FAIL', m); } };
 const RETIRED = /^(llama-3\.3-70b-versatile|llama-3\.1-8b-instant|meta-llama\/llama-4-scout-17b-16e-instruct)$/;
-/* ---- mock Groq: rejects retired models exactly like the real API, otherwise plays a script ---- */
+/* ---- mock OpenRouter API: model catalogue and scripted tool calls ---- */
 let script = [], seen = [];
-const groq = http.createServer((req, res) => { let b = ''; req.on('data', d => b += d); req.on('end', () => {
+const openrouter = http.createServer((req, res) => { let b = ''; req.on('data', d => b += d); req.on('end', () => {
   res.setHeader('content-type', 'application/json');
-  if (req.url.endsWith('/models')) return res.end(JSON.stringify({ data: [{ id: 'openai/gpt-oss-120b' }, { id: 'openai/gpt-oss-20b' }, { id: 'whisper-large-v3' }, { id: 'openai/gpt-oss-safeguard-20b' }] }));
-  if (req.headers.authorization !== 'Bearer gsk_test') { res.statusCode = 401; return res.end(JSON.stringify({ error: { message: 'bad key' } })); }
+  if (req.url.startsWith('/models')) return res.end(JSON.stringify({ data: [{ id: 'openai/gpt-oss-120b', architecture: { input_modalities: ['text'], output_modalities: ['text'] } }, { id: 'openai/gpt-oss-20b', architecture: { input_modalities: ['text'], output_modalities: ['text'] } }, { id: 'google/gemini-2.5-flash', architecture: { input_modalities: ['text','image'], output_modalities: ['text'] } }, { id: 'openai/gpt-oss-safeguard-20b', architecture: { input_modalities: ['text'], output_modalities: ['text'] } }] }));
+  if (req.headers.authorization !== 'Bearer mock-openrouter-token') { res.statusCode = 401; return res.end(JSON.stringify({ error: { message: 'bad key' } })); }
   const j = JSON.parse(b); seen.push(j);
-  if (RETIRED.test(j.model)) { res.statusCode = 404; return res.end(JSON.stringify({ error: { message: 'The model `' + j.model + '` has been decommissioned and is no longer supported.', type: 'invalid_request_error', code: 'model_decommissioned' } })); }
   const step = script.shift(); res.end(JSON.stringify(step ? step(j) : { choices: [{ finish_reason: 'stop', message: { content: 'ok' } }] }));
 }); });
 const call = (name, args, id = 'c1') => ({ choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] });
@@ -22,7 +21,7 @@ class C { constructor() { this.c = ''; }
 const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: iso(40), return_date: iso(50), seats: 40, outbound: { flight_number: 'SV 739', from: 'LHE', to: 'JED', departs: '03:15', arrives: '06:30', baggage_kg: 30 }, return_flight: { flight_number: 'SV 740', from: 'JED', to: 'LHE', departs: '02:00', arrives: '09:00', baggage_kg: 30 }, packages: [{ makkah_hotel: 'Hilton Makkah', makkah_nights: 5, makkah_distance: '300 m', madinah_hotel: 'Anwar Madinah', madinah_nights: 5, sharing: 250000, quad: 270000, triple: 290000, double: 320000 }], ...o });
 (async () => {
-  await new Promise(r => groq.listen(0, r));
+  await new Promise(r => openrouter.listen(0, r));
   /* a database written by the previous version: stale default model + a role that could import/edit/remove groups */
   fs.mkdirSync(dir, { recursive: true });
   // A v3 database fixture must have every required core collection. The storage
@@ -33,25 +32,24 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
     users: [], parties: [], bookings: [], vouchers: [], payments: [], entries: [],
     expenses: [], queries: [], paylinks: [], groups: [], hotels: [], visaTiers: [],
     tVehicles: [], tRoutes: [], tPrices: [], log: [], sessions: {},
-    settings: { groq: { apiKey: 'gsk_test', model: 'llama-3.3-70b-versatile', enabled: true, allowWrites: true, maxActions: 6, temperature: 0.2, instructions: '' } },
+    settings: { openrouter: { apiKeys: [{ id: 'or-test', key: 'mock-openrouter-token' }], model: 'openai/gpt-oss-120b', visionModel: 'google/gemini-2.5-flash', enabled: true, allowWrites: true, maxActions: 6, temperature: 0.2, instructions: '' } },
     roles: [{ id: 'r9', name: 'Old Group Role', desc: '', perms: ['groups.view', 'groups.edit'], active: true }],
     departments: []
   }));
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR: dir, ADMIN_PASSWORD: 'AdminPass#1', GROQ_BASE_URL: 'http://127.0.0.1:' + groq.address().port,  }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR: dir, ADMIN_PASSWORD: 'AdminPass#1', OPENROUTER_BASE_URL: 'http://127.0.0.1:' + openrouter.address().port,  }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise(r => srv.stdout.on('data', d => /running/.test(String(d)) && r()));
   const A = new C(); await A.login('admin', 'AdminPass#1');
 
-  console.log('Groq model');
-  let st = (await A.get('/api/state')).j; ok(st.settings.groq.model === 'openai/gpt-oss-120b', 'a stored retired default model is upgraded at start (' + st.settings.groq.model + ')');
-  ok(!st.settings.groqModels.some(m => /^llama/.test(m)), 'model suggestions contain no retired Llama models');
-  await A.rpc('saveSettings', { groq: { apiKey: '********', model: 'meta-llama/llama-4-scout-17b-16e-instruct', enabled: true, allowWrites: true, maxActions: 6, temperature: 0.2 } });
-  script = [() => say('Hello from the new model')]; seen = [];
-  let r = (await A.post('/api/ai', { q: 'hello' })).j;
-  ok(r.ai && r.reply === 'Hello from the new model' && r.model === 'openai/gpt-oss-120b' && /no longer available/.test(r.notice), 'a rejected model is replaced automatically and the user is told');
-  ok(seen.length === 2 && seen[1].model === 'openai/gpt-oss-120b' && seen[1].reasoning_effort === 'low' && seen[1].max_completion_tokens > 0 && !('max_tokens' in seen[1]), 'retry uses the supported model with current Groq parameters');
-  ok((await A.get('/api/state')).j.settings.groq.model === 'openai/gpt-oss-120b', 'the working model is saved in settings');
-  ok((await A.get('/api/audit')).j.rows.some(x => /group|assistant/i.test(x.a)) || (await A.get('/api/state')).j.log.some(l => l.a === 'AI model switched'), 'model switch is recorded in the activity log');
-  const t = (await A.post('/api/ai/test', { key: 'gsk_test' })).j; ok(t.ok && t.currentAvailable && t.models.includes('openai/gpt-oss-20b') && !t.models.some(m => /whisper|safeguard/.test(m)), 'test button lists only chat models and confirms the current one');
+  console.log('OpenRouter model discovery');
+  let st=(await A.get('/api/state')).j;
+  ok(st.settings.openrouter.model==='openai/gpt-oss-120b','OpenRouter chat model persists from prior settings');
+  ok(st.settings.openrouter.keyCount===1&&/^\\*+oken$/.test(st.settings.openrouter.keys[0].masked),'saved OpenRouter API keys are masked in state');
+  const t=(await A.post('/api/ai/test',{key:'mock-openrouter-token'})).j;
+  ok(t.ok&&t.models.some(m=>m.id==='openai/gpt-oss-20b')&&t.visionModels.some(m=>m.id==='google/gemini-2.5-flash'),'OpenRouter test discovers chat and image-capable models');
+  script=[()=>say('Hello from OpenRouter')];seen=[];
+  let hello=(await A.post('/api/ai',{q:'hello'})).j;
+  ok(hello.ai&&hello.reply==='Hello from OpenRouter'&&seen[0].model==='openai/gpt-oss-120b','assistant calls the configured OpenRouter model');
+  ok(seen[0].max_tokens>0&&seen[0].tools.length>0,'OpenRouter receives CRM tool definitions using current request parameters');
 
   console.log('Group packages: permissions');
   const rb = (await A.get('/api/state')).j.rbac; const old = rb.roles.find(x => x.id === 'r9'); ok(old.perms.includes('groups.create') && old.perms.includes('groups.delete'), 'existing groups.edit roles keep import and remove access after the split');
@@ -107,8 +105,8 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
   seen = []; script = [() => say('ok')]; await A.post('/api/ai', { q: 'x' }); const an = seen[0].tools.map(x => x.function.name); ok(['business_summary', 'find_records', 'add_party', 'create_group', 'remove_group', 'list_groups'].every(n => an.includes(n)), 'administrator gets every tool');
   script = [() => call('remove_group', { id: gid }), () => say('Confirm removal')]; r = (await A.post('/api/ai', { q: 'remove group ' + gid })).j; ok(r.actions[0].op === 'remove_group', 'removal is proposed, not executed');
   await A.post('/api/ai/run', { actions: r.actions }); ok(!(await A.get('/api/state')).j.groups.some(g => g.id === gid), 'confirmed removal works for the administrator');
-  /* no Groq key: rule-based commands still respect permissions */
-  await A.rpc('saveSettings', { groq: { apiKey: '********', enabled: false, allowWrites: true, model: 'openai/gpt-oss-120b', maxActions: 6, temperature: 0.2 } });
+  /* OpenRouter disabled: rule-based commands still respect permissions */
+  await A.rpc('saveSettings',{openrouter:{enabled:false,allowWrites:true,model:'openai/gpt-oss-120b',maxActions:6,temperature:.2}});
   r = (await creator.c.post('/api/ai', { q: 'groups' })).j; ok(!r.ai && /UG-/.test(r.reply), 'without a key, "groups" lists upcoming groups');
   r = (await creator.c.post('/api/ai', { q: 'remove group UG-9001' })).j; ok(r.actions.length === 0 && /permission/i.test(r.reply), 'without a key, removal is still refused for a creator');
   r = (await editor.c.post('/api/ai', { q: 'seats UG-9001 12' })).j; ok(r.actions.length === 1 && r.actions[0].op === 'set_group_seats', 'without a key, "seats UG-9001 12" becomes a proposal for an editor');
@@ -122,6 +120,6 @@ const GRP = o => ({ airline_code: 'SV', airline_name: 'Saudia', departure_date: 
 
   console.log('Live Travelport search remains disabled until credentials and account entitlements are provisioned.');
 
-  srv.kill('SIGTERM'); groq.close();
+  srv.kill('SIGTERM'); openrouter.close();
   console.log('\n' + pass + ' passed, ' + failN + ' failed'); process.exit(failN ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
