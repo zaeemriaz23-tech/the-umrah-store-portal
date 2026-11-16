@@ -258,3 +258,24 @@ button:disabled,.btn:disabled{cursor:wait!important;opacity:.72}.btn:disabled .s
 
 /* v3.22.3 quotation editor: no phantom first line, clearer first action */
 .qt-empty-items{display:grid;justify-items:start;gap:8px;padding:23px;border:1px dashed #cbdace;border-radius:13px;background:linear-gradient(135deg,#f7faf7,#fff)}.qt-empty-items b{font-size:14px;color:#174b35}.qt-empty-items p{max-width:580px;margin:0 0 4px;color:#697a70;font-size:12px;line-height:1.6}.qt-item{min-width:0}.qt-item .fld input,.qt-item .fld select,.qt-item .fld textarea{min-width:0}.qt-line-total{border:1px solid #dcebe0}.qt-hotel-fields{background:#f3f8f4;border-color:#cfdfd2}.qt-hotel-title b{font-variant-numeric:tabular-nums}
+
+/* Group-package filter builder: multiple supplier labels and composable departure filters. */
+.gd-air-filters{flex:1 1 100%;min-width:0}
+.gd-filter-panel{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+.gdf-brand{display:flex;align-items:flex-end;gap:8px;flex:1 1 360px;min-width:min(100%,280px)}
+.gdf-brand .fld{flex:1 1 auto;min-width:0}
+.gdf-add{white-space:nowrap;min-height:36px}
+.gdf-tokens{display:flex;align-items:center;gap:7px;flex-wrap:wrap;width:100%;padding:2px 0}
+.g-filter-token{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--g300,#b8d9cb);background:var(--g50,#edf7f2);color:var(--g800,#07513a);border-radius:999px;padding:6px 11px;font:700 12px/1.2 var(--sans,system-ui);cursor:pointer}
+.g-filter-token b{font-size:16px;line-height:10px}
+.gdf-more{width:100%;border-top:1px solid var(--line2);padding-top:10px}
+.gdf-more>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;font-size:13px;font-weight:800;color:var(--ink);padding:3px 0}
+.gdf-more>summary::-webkit-details-marker{display:none}
+.gdf-more>summary .hint{font-weight:500;letter-spacing:0;text-transform:none}
+.gdf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;padding:14px 0 4px}
+.gdf-grid .fld{min-width:0}
+.gdf-seats{align-self:end;padding:9px 0}
+.gdf-more[open]>summary{margin-bottom:2px}
+.gd-filter-count{font-size:12px;color:var(--mute);margin:0 0 10px;padding-left:2px}
+.gd-filter-count b{color:var(--ink)}
+@media(max-width:640px){.gdf-brand{flex-wrap:wrap}.gdf-add{width:100%}.gdf-grid{grid-template-columns:1fr 1fr}}

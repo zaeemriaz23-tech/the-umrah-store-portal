@@ -32,18 +32,29 @@
     const normFilter = v => GF ? GF.normalize(v) : String(v == null ? '' : v).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const matchesFilter = (text, query) => GF ? GF.matchesText(text, query) : normFilter(text).includes(normFilter(query));
     const run = () => {
-      const a = $('#fAir').value, m = $('#fMon').value, n = $('#fN').value, s = $('#fSeats').checked, brand = normFilter($('#fBrand')?.value || ''); let shown = 0;
-      $$('.gc', gl).forEach(c => {
-        const brandText = c.dataset.brand || '';
-        const airlineText = c.dataset.airline || '';
-        const ok = (!a || c.dataset.air === a || matchesFilter(airlineText, a)) && (!m || c.dataset.dep.startsWith(m)) && (!n || c.dataset.n === n) && (!s || !c.querySelector('.st.out')) && (!brand || matchesFilter(brandText, brand));
+      const a = $('#fAir')?.value || '', m = $('#fMon')?.value || '', n = $('#fN')?.value || '';
+      const seats = !!$('#fSeats')?.checked, brand = $('#fBrand')?.value || '', flight = $('#fFlight')?.value || '', hotel = $('#fHotel')?.value || '';
+      const from = $('#fFrom')?.value || '', to = $('#fTo')?.value || '';
+      const min = Number($('#fMin')?.value) || 0, max = Number($('#fMax')?.value) || 0;
+      let shown = 0;
+      $('.gc', gl).forEach(c => {
+        const airlineText = c.dataset.airline || '', dep = c.dataset.dep || '', price = Number(c.dataset.price) || 0;
+        const ok = (!a || c.dataset.air === a || matchesFilter(airlineText, a)) &&
+          (!m || dep.startsWith(m)) && (!n || c.dataset.n === n) &&
+          (!from || dep >= from) && (!to || dep <= to) &&
+          (!seats || !c.querySelector('.st.out')) &&
+          (!brand || matchesFilter(c.dataset.brand || '', brand)) &&
+          (!flight || matchesFilter(c.dataset.flight || '', flight)) &&
+          (!hotel || matchesFilter(c.dataset.hotel || '', hotel)) &&
+          (!min || (price > 0 && price >= min)) && (!max || (price > 0 && price <= max));
         c.hidden = !ok; if (ok) shown++;
       });
-      $('#gnone').hidden = shown > 0;
+      const count = $('#gcount'); if (count) count.textContent = `Showing ${shown} of ${$('.gc', gl).length} group departures`;
+      const none = $('#gnone'); if (none) none.hidden = shown > 0;
     };
-    $$('#gfilters select, #gfilters input').forEach(el => {
+    $('#gfilters select, #gfilters input').forEach(el => {
       el.addEventListener('change', run);
-      if (el.type === 'search' || el.type === 'text') el.addEventListener('input', run);
+      if (el.type === 'search' || el.type === 'text' || el.type === 'number') el.addEventListener('input', run);
     });
   }
 

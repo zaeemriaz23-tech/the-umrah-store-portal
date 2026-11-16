@@ -93,11 +93,35 @@ VIEWS.groups = {
   title: 'Group packages', roles: ['admin', 'staff', 'agent'],
   render() {
     const f = gf(), gs = S.groups || [], airs = uniq(gs.map(g => g.air)).sort(), months = uniq(gs.map(g => g.dep.slice(0, 7))).sort(), brands = GF ? GF.brandOptions(gs) : [], v = gView();
+    const selectedAirs = Array.isArray(f.airs) ? f.airs : (f.air ? [f.air] : []);
+    const selectedBrands = Array.isArray(f.brands) ? f.brands : (f.brand ? [f.brand] : []);
+    const brandChips = selectedBrands.map(b => `<button type="button" class="g-filter-token" data-act="gBrandRemove" data-a="${esc(b)}" title="Remove ${esc(b)} filter">${esc(b)} <b aria-hidden="true">×</b></button>`).join('');
     return `<div class="ph"><div><h1>Group packages</h1><p>Departure management · live seats, pricing and bookings. Departed groups are removed automatically.</p></div><div class="sp">${isStaff() && can('groups.create') ? `<button class="btn pri" data-act="gAdd">${ic('plus')}Add departure</button><button class="btn" data-act="gImport">${ic('upload')}Import PDF</button>` : ''}${isStaff() && (isAdmin() || can('assistant.groups')) ? `<a class="btn" href="#/assistant">${ic('spark')}Ask AI</a>` : ''}<a class="btn" href="#/calculator">${ic('terminal')}Calculator</a></div></div>
     ${gs.length ? gKpis(gs) : ''}
     <div class="gd-bar"><div class="tabs" role="tablist" aria-label="View">${[['cards', 'grid', 'Departures'], ['table', 'list', 'Table'], ['month', 'calendar', 'By month']].map(x => `<button role="tab" aria-selected="${v === x[0]}" class="${v === x[0] ? 'on' : ''}" data-act="gView" data-a="${x[0]}">${ic(x[1], 'sm')}${x[2]}</button>`).join('')}</div>
-    ${airs.length > 1 ? `<div class="chips" role="group" aria-label="Airline">${`<button class="chip ${!f.air ? 'on' : ''}" data-act="gAir" data-a="">All airlines</button>` + airs.map(a => `<button class="chip ${f.air === a ? 'on' : ''}" data-act="gAir" data-a="${esc(a)}">${airBadge(a, (gs.find(g => g.air === a) || {}).airline, 20)}${esc(Engine.airName(a, (gs.find(g => g.air === a) || {}).airline))}<i>${gs.filter(g => g.air === a).length}</i></button>`).join('')}</div>` : ''}</div>
-    <div class="fb"><div class="fld grow"><span>Search</span><input value="${esc(f.q || '')}" placeholder="Hotel, flight number, group code" data-inp="gQ"></div>${isStaff() ? `<div class="fld grow"><span>Brand / supplier</span><input type="search" list="gBrandOptions" value="${esc(f.brand || '')}" placeholder="AirSial, Meezab e Qaba, MZB or supplier" data-inp="gBrand" autocomplete="off"><datalist id="gBrandOptions">${brands.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></div>` : ''}<div class="fld"><span>Month</span><select data-chg="gF" data-k="mon">${opts(months.map(m => [m, MONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4)]), f.mon, 'Any month')}</select></div><div class="fld"><span>Nights</span><select data-chg="gF" data-k="n">${opts(uniq(gs.map(g => g.n)).sort((a, b) => a - b), f.n, 'Any')}</select></div><div class="fld"><span>Max price / person</span><input type="number" min="0" step="5000" value="${f.max || ''}" placeholder="PKR" data-chg="gF" data-k="max"></div><div class="fld"><span>Sort</span><select data-chg="gF" data-k="sort">${opts([['', 'Departure date'], ['price', 'Lowest price'], ['seats', 'Most seats']], f.sort)}</select></div><div class="qk"><label class="chk"><input type="checkbox" ${f.avail ? 'checked' : ''} data-chg="gF" data-k="avail">Only with seats</label><button class="btn sm ghost" data-act="gClear">${ic('x', 'sm')}Clear</button></div></div>
+    ${airs.length ? `<div class="chips gd-air-filters" role="group" aria-label="Filter by airline (select multiple)"><button class="chip ${!selectedAirs.length ? 'on' : ''}" data-act="gAir" data-a="">All airlines</button>` + airs.map(a => `<button class="chip ${selectedAirs.some(x => String(x).toUpperCase() === String(a).toUpperCase()) ? 'on' : ''}" data-act="gAir" data-a="${esc(a)}">${airBadge(a, (gs.find(g => g.air === a) || {}).airline, 20)}${esc(Engine.airName(a, (gs.find(g => g.air === a) || {}).airline))}<i>${gs.filter(g => g.air === a).length}</i></button>`).join('') + `</div>` : ''}</div>
+    <div class="fb gd-filter-panel">
+      <div class="fld grow"><span>Search all group details</span><input value="${esc(f.q || '')}" placeholder="Group code, airline, flight, hotel, airport" data-inp="gQ"></div>
+      ${isStaff() ? `<div class="gdf-brand"><label class="fld"><span>Add brand / supplier filters (multiple)</span><input id="gBrandInput" type="search" list="gBrandOptions" placeholder="Type AirSial, Meezab e Qaba, MZB…" data-enter="gBrandAdd" autocomplete="off"><datalist id="gBrandOptions">${brands.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></label><button type="button" class="btn sm pri gdf-add" data-act="gBrandAdd">${ic('plus', 'sm')}Add filter</button></div>` : ''}
+      ${brandChips ? `<div class="gdf-tokens" aria-label="Active brand filters">${brandChips}<span class="hint">Any selected brand may match</span></div>` : ''}
+      <details class="gdf-more" ${['flight','hotel','mkHotel','mdHotel','from','to','mon','n','minPrice','maxPrice','avail'].some(k => f[k]) ? 'open' : ''}><summary>${ic('filter', 'sm')} More filters <span class="hint">Dates · Flights · Hotels · Nights · Price · Seats</span></summary>
+        <div class="gdf-grid">
+          <label class="fld"><span>Flight number / route</span><input value="${esc(f.flight || '')}" placeholder="PF 718, SV 739, ISB JED" data-inp="gFlight"></label>
+          <label class="fld"><span>Any hotel</span><input value="${esc(f.hotel || '')}" placeholder="Hotel name or distance" data-inp="gHotel"></label>
+          <label class="fld"><span>Makkah hotel</span><input value="${esc(f.mkHotel || '')}" placeholder="Makkah hotel" data-inp="gMkHotel"></label>
+          <label class="fld"><span>Madinah hotel</span><input value="${esc(f.mdHotel || '')}" placeholder="Madinah hotel" data-inp="gMdHotel"></label>
+          <label class="fld"><span>Departure from</span><input type="date" value="${esc(f.from || '')}" data-chg="gF" data-k="from"></label>
+          <label class="fld"><span>Departure to</span><input type="date" value="${esc(f.to || '')}" data-chg="gF" data-k="to"></label>
+          <label class="fld"><span>Month</span><select data-chg="gF" data-k="mon">${opts(months.map(m => [m, MONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4)]), f.mon, 'Any month')}</select></label>
+          <label class="fld"><span>Nights</span><select data-chg="gF" data-k="n">${opts(uniq(gs.map(g => g.n)).sort((a, b) => a - b), f.n, 'Any')}</select></label>
+          <label class="fld"><span>Minimum price / person (PKR)</span><input type="number" min="0" step="5000" value="${f.minPrice || ''}" placeholder="No minimum" data-chg="gF" data-k="minPrice"></label>
+          <label class="fld"><span>Maximum price / person (PKR)</span><input type="number" min="0" step="5000" value="${f.maxPrice || f.max || ''}" placeholder="No maximum" data-chg="gF" data-k="maxPrice"></label>
+          <label class="fld"><span>Sort results</span><select data-chg="gF" data-k="sort">${opts([['', 'Departure date'], ['price', 'Lowest price'], ['seats', 'Most seats']], f.sort)}</select></label>
+          <label class="chk gdf-seats"><input type="checkbox" ${f.avail ? 'checked' : ''} data-chg="gF" data-k="avail">Only with seats available</label>
+        </div>
+      </details>
+      <div class="qk"><button class="btn sm ghost" data-act="gClear">${ic('x', 'sm')}Clear all filters</button></div>
+    </div>
     <div id="glist">${gList()}</div>`;
   }
 };
@@ -146,9 +170,27 @@ ACT.gdCsv = () => {
 };
 
 CHG.gF = (v, t) => { gf()[t.dataset.k] = v; renderView(); };
-INP.gQ = debounce(v => { gf().q = v; const r = $('#glist'); if (r) r.innerHTML = gList(); }, 100);
-INP.gBrand = debounce(v => { gf().brand = v; const r = $('#glist'); if (r) r.innerHTML = gList(); }, 90);
-ACT.gAir = a => { gf().air = a; renderView(); };
+const refreshGroupList = () => { const r = $('#glist'); if (r) r.innerHTML = gList(); };
+INP.gQ = debounce(v => { gf().q = v; refreshGroupList(); }, 100);
+INP.gFlight = debounce(v => { gf().flight = v; refreshGroupList(); }, 110);
+INP.gHotel = debounce(v => { gf().hotel = v; refreshGroupList(); }, 110);
+INP.gMkHotel = debounce(v => { gf().mkHotel = v; refreshGroupList(); }, 110);
+INP.gMdHotel = debounce(v => { gf().mdHotel = v; refreshGroupList(); }, 110);
+ACT.gBrandAdd = (value, target) => {
+  const input = $('#gBrandInput'), raw = String(value || (input && input.value) || '').trim();
+  const additions = raw.split(/[,;|\n\r]+/).map(x => x.trim()).filter(Boolean);
+  if (!additions.length) { toast('Enter a brand or supplier name first', true); return; }
+  const f = gf(), list = Array.isArray(f.brands) ? f.brands.slice() : (f.brand ? [f.brand] : []), seen = new Set(list.map(x => GF ? GF.normalize(x) : String(x).toLowerCase()));
+  additions.forEach(x => { const key = GF ? GF.normalize(x) : x.toLowerCase(); if (key && !seen.has(key)) { list.push(x); seen.add(key); } });
+  f.brands = list; delete f.brand; renderView();
+};
+ACT.gBrandRemove = value => { const f = gf(); f.brands = (Array.isArray(f.brands) ? f.brands : []).filter(x => x !== value); if (!f.brands.length) delete f.brands; renderView(); };
+ACT.gAir = value => {
+  const f = gf(), selected = Array.isArray(f.airs) ? f.airs.slice() : (f.air ? [f.air] : []);
+  if (!value) { delete f.airs; delete f.air; }
+  else { const at = selected.findIndex(x => String(x).toUpperCase() === String(value).toUpperCase()); if (at >= 0) selected.splice(at, 1); else selected.push(value); f.airs = selected; delete f.air; if (!selected.length) delete f.airs; }
+  renderView();
+};
 ACT.gClear = () => { UI.f.grp = {}; renderView(); };
 ACT.gCopy = id => navigator.clipboard.writeText(groupText(S.groups.find(g => g.id === id)).replace(/\*/g, '')).then(() => toast('Group details copied'));
 ACT.gQuote = id => { UI.calc2 = UI.calc2 || null; UI.calcMode = 'group'; cc().gid = id; cc().pid = ''; go('calculator'); };

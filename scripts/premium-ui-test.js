@@ -6,7 +6,7 @@ const index = read('public/index.html');
 const css = read('public/premium.css');
 const adm = read('public/v-adm.js');
 const render = read('lib/render.js');
-assert.match(index, /href="\/premium\.css\?v=328"/, 'premium UI layer loads after the existing CRM design system');
+assert.match(index, /href="\/premium\.css\?v=329"/, 'premium UI layer loads after the existing CRM design system');
 for (const token of ['--p-green-strong', '.side .nx.on', '.page{', '.tw{', '@media(max-width:600px)', '.ac-hero', '.ac-metrics', '.ac-panel']) {
   assert.ok(css.includes(token), 'premium UI includes ' + token);
 }
