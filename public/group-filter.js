@@ -10,7 +10,7 @@
   const normalize = value => String(value == null ? '' : value)
     .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const ROOT_KEYS = ['brand','brandName','supplier','supplierName','provider','providerName','supplierLabel','supplierRef','source','src','airline','air','carrier','carrierName','name','title','label','code','ref'];
+  const ROOT_KEYS = ['brand','brandName','supplier','supplierName','provider','providerName','supplierLabel','supplierRef','source','src'];
   const META_KEYS = ['brand','brandName','supplier','supplierName','provider','providerName','name','title','label','src','source','code','ref','oid'];
   const BRAND_KEYS = ['brand','brandName','supplier','supplierName','provider','providerName','supplierLabel'];
   const addValue = (target, value) => {
@@ -41,11 +41,10 @@
     addObject(values, supplier, META_KEYS);
     addObject(values, group.meezab, META_KEYS);
     const src = normalize([supplier.src, supplier.source, group.source, group.src].join(' '));
-    const combined = normalize([group.supplierLabel, group.brand, group.supplier, supplier.name, supplier.label, supplier.code, group.airline].join(' '));
+    const combined = normalize([group.supplierLabel, group.brand, group.supplier, supplier.name, supplier.label, supplier.code].join(' '));
     if (src.includes('meezab') || combined.includes('meezab') || combined.includes('mzb') || group.meezab) {
       values.push('Meezab', 'Meezab e Qaba', 'Meezab e Kaba', 'MZB', 'Meezab Group', 'Meezab Group CRM');
     }
-    if (combined.includes('airsial') || combined.includes('air sial') || /\bpf\b/.test(combined)) values.push('AirSial', 'Air Sial', 'PF');
     (Array.isArray(group.pk) ? group.pk : []).forEach(pkg => {
       addObject(values, pkg, ROOT_KEYS);
       addObject(values, pkg && pkg.sup, META_KEYS);
@@ -132,10 +131,8 @@
       addObject(values, group, BRAND_KEYS);
       addObject(values, group.sup || group.supplier, META_KEYS);
       addObject(values, group.meezab, META_KEYS);
-      addValue(values, group.airline);
-      const all = normalize([group.supplierLabel, group.sup && group.sup.src, group.source, group.src, group.airline].join(' '));
+      const all = normalize([group.supplierLabel, group.sup && group.sup.src, group.source, group.src].join(' '));
       if (all.includes('meezab') || all.includes('mzb') || group.meezab) values.push('Meezab e Qaba', 'Meezab e Kaba', 'MZB');
-      if (all.includes('airsial') || all.includes('air sial') || /\bpf\b/.test(all)) values.push('AirSial', 'Air Sial', 'PF');
       (Array.isArray(group.pk) ? group.pk : []).forEach(pkg => {
         if (!pkg) return;
         addObject(values, pkg, BRAND_KEYS);
@@ -147,7 +144,6 @@
   function airlineOptions(groups) {
     const values = [];
     (Array.isArray(groups) ? groups : []).forEach(group => {
-      if (group) { addValue(values, group.air); addValue(values, group.airline); }
     });
     return [...new Set(values.map(v => String(v).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   }
