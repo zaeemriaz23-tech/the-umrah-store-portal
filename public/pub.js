@@ -28,12 +28,20 @@
   /* ---------- group filters ---------- */
   const gl = $('#glist');
   if (gl && $('#gfilters')) {
+    const normFilter = v => String(v == null ? '' : v).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const run = () => {
-      const a = $('#fAir').value, m = $('#fMon').value, n = $('#fN').value, s = $('#fSeats').checked; let shown = 0;
-      $$('.gc', gl).forEach(c => { const ok = (!a || c.dataset.air === a) && (!m || c.dataset.dep.startsWith(m)) && (!n || c.dataset.n === n) && (!s || !c.querySelector('.st.out')); c.hidden = !ok; if (ok) shown++; });
+      const a = $('#fAir').value, m = $('#fMon').value, n = $('#fN').value, s = $('#fSeats').checked, brand = normFilter($('#fBrand')?.value || ''); let shown = 0;
+      $$('.gc', gl).forEach(c => {
+        const brandText = normFilter(c.dataset.brand || '');
+        const ok = (!a || c.dataset.air === a) && (!m || c.dataset.dep.startsWith(m)) && (!n || c.dataset.n === n) && (!s || !c.querySelector('.st.out')) && (!brand || brandText.includes(brand));
+        c.hidden = !ok; if (ok) shown++;
+      });
       $('#gnone').hidden = shown > 0;
     };
-    $$('#gfilters select, #gfilters input').forEach(el => el.addEventListener('change', run));
+    $$('#gfilters select, #gfilters input').forEach(el => {
+      el.addEventListener('change', run);
+      if (el.type === 'search' || el.type === 'text') el.addEventListener('input', run);
+    });
   }
 
   /* ---------- shared helpers for apps ---------- */

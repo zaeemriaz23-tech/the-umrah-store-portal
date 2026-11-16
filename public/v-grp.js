@@ -3,16 +3,30 @@
 const ROOMS = [['sh', 'Sharing', 'Sharing'], ['qd', 'Quad', 'Quad'], ['tr', 'Triple', 'Triple'], ['db', 'Double', 'Double']];
 const gf = () => UI.f.grp || (UI.f.grp = {});
 const seatCls = n => (n <= 0 ? 'out' : n < 10 ? 'low' : 'ok');
+// Search all stored supplier / brand metadata, not only the airline IATA code.
+// Old and newly synced group records can use different metadata field names.
+const gNorm = v => String(v == null ? '' : v).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+function gBrandText(g) {
+  const s = g && g.sup || {}, m = g && g.meezab || {}, values = [];
+  const add = v => { if (typeof v === 'string' || typeof v === 'number') { if (String(v).trim()) values.push(String(v)); } };
+  ['brand', 'brandName', 'supplier', 'supplierName', 'provider', 'providerName', 'source', 'airline', 'air', 'supplierRef', 'supplierLabel'].forEach(k => add(g && g[k]));
+  ['brand', 'brandName', 'supplier', 'supplierName', 'provider', 'providerName', 'name', 'title', 'label', 'src', 'code'].forEach(k => add(s[k]));
+  ['brand', 'brandName', 'supplier', 'name', 'label', 'ref'].forEach(k => add(m[k]));
+  if (g && (g.sup && String(g.sup.src || '').toLowerCase() === 'meezab' || g.meezab)) values.push('Meezab', 'Meezab e Qaba');
+  (g && g.pk || []).forEach(k => { add(k && k.brand); add(k && k.supplier); add(k && k.sup && k.sup.brand); add(k && k.sup && k.sup.code); });
+  return [...new Set(values.map(x => String(x).trim()).filter(Boolean))].join(' ');
+}
 const gFrom = g => { const v = g.pk.flatMap(k => Object.values(k.p)).filter(x => x > 0); return v.length ? Math.min(...v) : 0; };
 const kFrom = k => { const v = Object.values(k.p).filter(x => x > 0); return v.length ? Math.min(...v) : 0; };
 function matchG(g, f) {
-  if (f.air && g.air !== f.air) return false;
+  if (f.air && String(g.air || '').toUpperCase() !== String(f.air).toUpperCase()) return false;
+  if (f.brand && !gNorm(gBrandText(g)).includes(gNorm(f.brand))) return false;
   if (f.mon && !g.dep.startsWith(f.mon)) return false;
   if (f.from && g.dep < f.from) return false; if (f.to && g.dep > f.to) return false;
   if (f.n && g.n != f.n) return false;
   if (f.avail && g.seats <= 0) return false;
   if (f.max && gFrom(g) > +f.max) return false;
-  if (f.q) { const q = f.q.toLowerCase(); if (![g.id, g.code, g.airline, g.air, g.out.fn, g.inb.fn, ...g.pk.flatMap(k => [k.mk, k.md, k.id])].join(' ').toLowerCase().includes(q)) return false; }
+  if (f.q) { const q = gNorm(f.q); if (!gNorm([g.id, g.code, g.airline, g.air, g.out.fn, g.inb.fn, g.supplierRef, gBrandText(g), ...g.pk.flatMap(k => [k.mk, k.md, k.id])].join(' ')).includes(q)) return false; }
   return true;
 }
 const legHtml = (t, l) => `<div class="leg"><div class="lt"><div class="ap">${esc(l.from)}</div><div class="t">${esc(l.dt)}</div></div><div class="ln"></div><div class="lt"><div class="ap">${esc(l.to)}</div><div class="t">${esc(l.at)}</div></div><div class="meta"><b>${t} ${esc(l.fn)}</b><br>${fdow(l.date)}, ${fdate(l.date)}${l.bag ? ' · ' + l.bag + ' kg baggage' : ''}</div></div>`;
@@ -88,7 +102,7 @@ VIEWS.groups = {
     ${gs.length ? gKpis(gs) : ''}
     <div class="gd-bar"><div class="tabs" role="tablist" aria-label="View">${[['cards', 'grid', 'Departures'], ['table', 'list', 'Table'], ['month', 'calendar', 'By month']].map(x => `<button role="tab" aria-selected="${v === x[0]}" class="${v === x[0] ? 'on' : ''}" data-act="gView" data-a="${x[0]}">${ic(x[1], 'sm')}${x[2]}</button>`).join('')}</div>
     ${airs.length > 1 ? `<div class="chips" role="group" aria-label="Airline">${`<button class="chip ${!f.air ? 'on' : ''}" data-act="gAir" data-a="">All airlines</button>` + airs.map(a => `<button class="chip ${f.air === a ? 'on' : ''}" data-act="gAir" data-a="${esc(a)}">${airBadge(a, (gs.find(g => g.air === a) || {}).airline, 20)}${esc(Engine.airName(a, (gs.find(g => g.air === a) || {}).airline))}<i>${gs.filter(g => g.air === a).length}</i></button>`).join('')}</div>` : ''}</div>
-    <div class="fb"><div class="fld grow"><span>Search</span><input value="${esc(f.q || '')}" placeholder="Hotel, flight number, group code" data-inp="gQ"></div><div class="fld"><span>Month</span><select data-chg="gF" data-k="mon">${opts(months.map(m => [m, MONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4)]), f.mon, 'Any month')}</select></div><div class="fld"><span>Nights</span><select data-chg="gF" data-k="n">${opts(uniq(gs.map(g => g.n)).sort((a, b) => a - b), f.n, 'Any')}</select></div><div class="fld"><span>Max price / person</span><input type="number" min="0" step="5000" value="${f.max || ''}" placeholder="PKR" data-chg="gF" data-k="max"></div><div class="fld"><span>Sort</span><select data-chg="gF" data-k="sort">${opts([['', 'Departure date'], ['price', 'Lowest price'], ['seats', 'Most seats']], f.sort)}</select></div><div class="qk"><label class="chk"><input type="checkbox" ${f.avail ? 'checked' : ''} data-chg="gF" data-k="avail">Only with seats</label><button class="btn sm ghost" data-act="gClear">${ic('x', 'sm')}Clear</button></div></div>
+    <div class="fb"><div class="fld grow"><span>Search</span><input value="${esc(f.q || '')}" placeholder="Hotel, flight number, group code" data-inp="gQ"></div>${isStaff() ? `<div class="fld grow"><span>Brand / supplier</span><input type="search" value="${esc(f.brand || '')}" placeholder="Meezab e Qaba or supplier name" data-inp="gBrand" autocomplete="off"></div>` : ''}<div class="fld"><span>Month</span><select data-chg="gF" data-k="mon">${opts(months.map(m => [m, MONTHS[+m.slice(5) - 1] + ' ' + m.slice(0, 4)]), f.mon, 'Any month')}</select></div><div class="fld"><span>Nights</span><select data-chg="gF" data-k="n">${opts(uniq(gs.map(g => g.n)).sort((a, b) => a - b), f.n, 'Any')}</select></div><div class="fld"><span>Max price / person</span><input type="number" min="0" step="5000" value="${f.max || ''}" placeholder="PKR" data-chg="gF" data-k="max"></div><div class="fld"><span>Sort</span><select data-chg="gF" data-k="sort">${opts([['', 'Departure date'], ['price', 'Lowest price'], ['seats', 'Most seats']], f.sort)}</select></div><div class="qk"><label class="chk"><input type="checkbox" ${f.avail ? 'checked' : ''} data-chg="gF" data-k="avail">Only with seats</label><button class="btn sm ghost" data-act="gClear">${ic('x', 'sm')}Clear</button></div></div>
     <div id="glist">${gList()}</div>`;
   }
 };
@@ -137,7 +151,8 @@ ACT.gdCsv = () => {
 };
 
 CHG.gF = (v, t) => { gf()[t.dataset.k] = v; renderView(); };
-INP.gQ = debounce(v => { gf().q = v; $('#glist').innerHTML = gList(); });
+INP.gQ = debounce(v => { gf().q = v; const r = $('#glist'); if (r) r.innerHTML = gList(); }, 100);
+INP.gBrand = debounce(v => { gf().brand = v; const r = $('#glist'); if (r) r.innerHTML = gList(); }, 90);
 ACT.gAir = a => { gf().air = a; renderView(); };
 ACT.gClear = () => { UI.f.grp = {}; renderView(); };
 ACT.gCopy = id => navigator.clipboard.writeText(groupText(S.groups.find(g => g.id === id)).replace(/\*/g, '')).then(() => toast('Group details copied'));
