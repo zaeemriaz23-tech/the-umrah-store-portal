@@ -1,15 +1,15 @@
 'use strict';
-/* Tests banking, payment rules, public bank page and the Groq assistant (against a local mock of the Groq API). Run: node scripts/bank-ai-test.js */
+/* Tests banking, payment rules, public bank page and the OpenRouter assistant (against a local mock endpoint). Run: node scripts/bank-ai-test.js */
 const { spawn } = require('child_process'); const http = require('http'); const fs = require('fs'); const os = require('os'); const path = require('path');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crm2-')), PORT = 3800 + Math.floor(Math.random() * 90), B = 'http://127.0.0.1:' + PORT;
 let pass = 0, failN = 0; const ok = (c, m) => { if (c) { pass++; console.log('  PASS', m); } else { failN++; console.log('  FAIL', m); } };
-/* mock Groq: first call -> tool call, second -> final text */
-let groqSeen = [];
+/* mock OpenRouter: first call -> tool call, second -> final text */
+let openrouterSeen = [];
 const mock = http.createServer((req, res) => { let b = ''; req.on('data', d => b += d); req.on('end', () => {
   res.setHeader('content-type', 'application/json');
-  if (req.url.endsWith('/models')) return res.end(JSON.stringify({ data: [{ id: 'openai/gpt-oss-120b' }, { id: 'whisper-large-v3' }] }));
-  if (req.headers.authorization !== 'Bearer gsk_test') { res.statusCode = 401; return res.end(JSON.stringify({ error: { message: 'bad key' } })); }
-  const j = JSON.parse(b); groqSeen.push(j); const last = j.messages[j.messages.length - 1];
+  if (req.url.startsWith('/models')) return res.end(JSON.stringify({ data: [{ id: 'openai/gpt-oss-120b', architecture: { input_modalities: ['text'], output_modalities: ['text'] } }, { id: 'google/gemini-2.5-flash', architecture: { input_modalities: ['text','image'], output_modalities: ['text'] } }] }));
+  if (req.headers.authorization !== 'Bearer mock-openrouter-token') { res.statusCode = 401; return res.end(JSON.stringify({ error: { message: 'bad key' } })); }
+  const j = JSON.parse(b); openrouterSeen.push(j); const last = j.messages[j.messages.length - 1];
   if (last.role === 'user') return res.end(JSON.stringify({ choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [/add agent/i.test(last.content) ? { id: 'c1', type: 'function', function: { name: 'add_party', arguments: JSON.stringify({ kind: 'agent', name: 'Mock Travels' }) } } : { id: 'c1', type: 'function', function: { name: 'business_summary', arguments: '{}' } }] } }] }));
   res.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: 'Done: ' + String(last.content).slice(0, 60) } }] }));
 }); });
@@ -18,7 +18,7 @@ class C { constructor() { this.c = ''; }
   login(l, p) { return this.req('POST', '/api/login', { login: l, password: p }); } rpc(op, p) { return this.req('POST', '/api/rpc', { op, ...p }); } get(u) { return this.req('GET', u); } post(u, b) { return this.req('POST', u, b); } }
 (async () => {
   await new Promise(r => mock.listen(0, r)); const mp = mock.address().port;
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR: dir, ADMIN_PASSWORD: 'AdminPass#1', GROQ_BASE_URL: 'http://127.0.0.1:' + mp }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT, DATA_DIR: dir, ADMIN_PASSWORD: 'AdminPass#1', OPENROUTER_BASE_URL: 'http://127.0.0.1:' + mp }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise(r => srv.stdout.on('data', d => /running/.test(String(d)) && r()));
   const A = new C(); await A.login('admin', 'AdminPass#1');
   console.log('Banking');
@@ -49,22 +49,32 @@ class C { constructor() { this.c = ''; }
   console.log('Settings');
   ok((await A.rpc('saveSettings', { security: { sessionDays: 3, minPassword: 10, loginMax: 5 } })).s === 200, 'security settings saved');
   ok((await A.rpc('saveParty', { kind: 'agent', name: 'Short Pw', login: 'shortpw', password: 'abc12345' })).s === 400, 'minimum password length enforced');
-  const gst = (await A.get('/api/state')).j.settings; ok(gst.groq && gst.groq.apiKey === '' && Array.isArray(gst.groqModels) && !('anthropicKey' in gst), 'settings expose Groq block, no Anthropic');
-  console.log('Groq assistant');
-  const noKey = (await A.post('/api/ai', { q: 'summary' })).j; ok(/Bookings/.test(noKey.reply) && !noKey.ai, 'without a key, simple read commands still work');
-  ok((await A.post('/api/ai/test', { key: 'gsk_test' })).s === 400 || true, 'test endpoint reachable');
-  await A.rpc('saveSettings', { groq: { apiKey: 'gsk_test', model: 'openai/gpt-oss-120b', enabled: true, allowWrites: true, maxActions: 5, temperature: 0.2, instructions: 'Be brief' } });
-  const masked = (await A.get('/api/state')).j.settings.groq.apiKey; ok(/^\*+$/.test(masked), 'Groq key is masked in state');
-  const r1 = (await A.post('/api/ai', { q: 'how are we doing', history: [{ role: 'user', content: 'hi' }] })).j; ok(r1.ai && /^Done/.test(r1.reply) && groqSeen.length === 2, 'assistant answers using a read tool (2 Groq round trips)');
-  ok(groqSeen[0].tools.some(t => t.function.name === 'get_ledger') && groqSeen[0].tools.some(t => t.function.name === 'add_party') && groqSeen[0].messages[0].content.includes('Be brief'), 'tools + admin instructions sent to Groq');
-  const sys = JSON.stringify(groqSeen); ok(!sys.includes('AdminPass') && !sys.includes('gsk_test'), 'no secrets sent in prompts');
-  const r2 = (await A.post('/api/ai', { q: 'add agent Mock Travels' })).j; ok(r2.actions.length === 1 && r2.actions[0].op === 'add_party', 'write requests only create proposals');
-  ok(!(await A.get('/api/state')).j.parties.some(p => p.name === 'Mock Travels'), 'nothing changed before confirmation');
-  const run = (await A.post('/api/ai/run', { actions: r2.actions })).j; ok(run.results[0].ok && (await A.get('/api/state')).j.parties.some(p => p.name === 'Mock Travels'), 'confirmation executes the change');
-  ok((await G.post('/api/ai', { q: 'x' })).s === 403, 'agents cannot use the assistant');
-  ok((await A.post('/api/ai/run', { actions: [{ op: 'saveSettings', args: {} }] })).j.results[0].ok === false, 'assistant cannot run non add/remove operations');
-  await A.rpc('saveSettings', { groq: { apiKey: '********', allowWrites: false, enabled: true, model: 'openai/gpt-oss-120b', maxActions: 5, temperature: 0.2 } });
-  const r3 = (await A.post('/api/ai', { q: 'x' })).j; ok(groqSeen[groqSeen.length - 2].tools.every(t => !/^(add|remove)_/.test(t.function.name)), 'read-only mode hides write tools');
+  const gst=(await A.get('/api/state')).j.settings;
+  ok(gst.openrouter&&gst.openrouter.keyCount===0&&!gst.openrouter.envKey,'settings expose OpenRouter configuration without a saved key');
+  console.log('Operations Copilot');
+  const noKey=(await A.post('/api/ai',{q:'summary'})).j;
+  ok(/Bookings/.test(noKey.reply)&&!noKey.ai,'without a key, simple read commands still work');
+  const test=await A.post('/api/ai/test',{key:'mock-openrouter-token'});
+  ok(test.s===200&&test.j.ok&&test.j.models.some(m=>m.id==='openai/gpt-oss-120b'),'admin can test an OpenRouter key and discover models');
+  await A.rpc('saveSettings',{openrouter:{addKeys:['mock-openrouter-token'],model:'openai/gpt-oss-120b',visionModel:'google/gemini-2.5-flash',enabled:true,allowWrites:true,maxActions:5,temperature:.2,instructions:'Be brief'}});
+  const cfg=(await A.get('/api/state')).j.settings.openrouter;
+  ok(cfg.keyCount===1&&/^••••••••oken$/.test(cfg.keys[0].masked),'OpenRouter key is masked in browser state');
+  openrouterSeen=[];
+  const r1=(await A.post('/api/ai',{q:'how are we doing',history:[{role:'user',content:'hi'}]})).j;
+  ok(r1.ai&&/^Done/.test(r1.reply)&&openrouterSeen.length===2,'assistant answers using a read tool (2 OpenRouter round trips)');
+  ok(openrouterSeen[0].tools.some(t=>t.function.name==='get_ledger')&&openrouterSeen[0].tools.some(t=>t.function.name==='add_party')&&openrouterSeen[0].messages[0].content.includes('Be brief'),'existing CRM tools and admin instructions reach OpenRouter');
+  ok(!JSON.stringify(openrouterSeen).includes('AdminPass')&&!JSON.stringify(openrouterSeen).includes('mock-openrouter-token'),'passwords and API tokens are never sent in prompts');
+  const r2=(await A.post('/api/ai',{q:'add agent Mock Travels'})).j;
+  ok(r2.actions.length===1&&r2.actions[0].op==='add_party','write requests only create proposals');
+  ok(!(await A.get('/api/state')).j.parties.some(p=>p.name==='Mock Travels'),'nothing changes before confirmation');
+  const run=(await A.post('/api/ai/run',{actions:r2.actions})).j;
+  ok(run.results[0].ok&&(await A.get('/api/state')).j.parties.some(p=>p.name==='Mock Travels'),'confirmation executes the change');
+  ok((await G.post('/api/ai',{q:'x'})).s===403,'agents cannot use the assistant');
+  ok((await A.post('/api/ai/run',{actions:[{op:'saveSettings',args:{}}]})).j.results[0].ok===false,'assistant cannot execute settings operations');
+  await A.rpc('saveSettings',{openrouter:{allowWrites:false}});
+  openrouterSeen=[];
+  const r3=(await A.post('/api/ai',{q:'x'})).j;
+  ok(openrouterSeen[0].tools.every(t=>!/^(add|remove)_/.test(t.function.name)),'read-only mode hides write tools');
   srv.kill('SIGTERM'); mock.close();
   console.log('\n' + pass + ' passed, ' + failN + ' failed'); process.exit(failN ? 1 : 0);
 })();

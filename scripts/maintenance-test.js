@@ -14,11 +14,11 @@ const base = 'http://127.0.0.1:' + PORT;
 const call = async (p, o = {}, cookie = '') => { const r = await fetch(base + p, { redirect: 'manual', ...o, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...(o.headers || {}) } }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {} return { s: r.status, t, j, h: r.headers }; };
 const login = async (l, pw) => { const r = await call('/api/login', { method: 'POST', body: JSON.stringify({ login: l, password: pw }) }); const c = (r.h.get('set-cookie') || '').split(';')[0]; return { ...r, c }; };
 (async () => {
-  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'ignore' });
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT) }, stdio: 'inherit' });
   for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise(r => setTimeout(r, 250)); }
   try {
     console.log('Normal operation');
-    let r = await call('/'); ok(r.s === 200 && /Everything your Umrah desk needs/.test(r.t) && /portal\.css/.test(r.t), 'established portal landing page served at /');
+    let r = await call('/'); ok(r.s === 200 && /Umrah packages, flights and agent portal/.test(r.t) && /portal\.css/.test(r.t), 'established portal landing page served at /');
     ok(/portal\.js/.test(r.t) && /home\.css/.test(r.t) && /application\/ld\+json/.test(r.t), 'homepage uses the existing portal experience with SEO data');
     r = await call('/login'); ok(r.s === 302 && r.h.get('location') === '/?login=1', 'Agent Login deep link opens the established sign-in modal');
     r = await call('/portal'); ok(r.s === 200 && /portal\.js/.test(r.t), 'agent workspace still served at /portal');
@@ -41,16 +41,16 @@ const login = async (l, pw) => { const r = await call('/api/login', { method: 'P
     r = await call('/api/rpc', { method: 'POST', body: JSON.stringify({ op: 'saveBooking' }) }, ag.c); ok(r.s === 503, 'an existing agent session cannot write');
     r = await call('/api/public/maintenance'); ok(r.s === 200 && r.j.on === true, 'public status endpoint reports it');
     r = await call('/payfast/ipn', { method: 'POST', body: '{}' }); ok(r.s !== 503, 'payment-gateway callbacks are not blocked');
-    r = await call('/app'); ok(r.s === 200 && /Only administrators and internal staff can sign in/.test(r.t), 'sign-in page stays reachable, with a notice');
+    r = await call('/app'); ok(r.s === 200 && /Administrators and internal staff retain access/.test(r.t), 'sign-in page stays reachable, with a notice');
     r = await call('/home.css'); ok(r.s === 200, 'homepage stylesheet still loads');
     r = await call('/api/state', {}, ad.c); ok(r.s === 200 && r.j.user && r.j.user.role === 'admin' && r.j.maintenance.on === true, 'admin keeps full access with a live session');
     const ad2 = await login('admin', 'AdminPass123'); ok(ad2.s === 200, 'admin can still sign in while maintenance is on (never locked out)');
     r = await call('/?preview=maintenance', {}, ad.c); ok(r.s === 200 && /Preview for administrators/.test(r.t), 'admin can preview the page');
-    r = await call('/', {}, ad.c); ok(r.s === 200 && /Everything your Umrah desk needs/.test(r.t), 'administrators still see the normal site');
+    r = await call('/', {}, ad.c); ok(r.s === 200 && /Umrah packages, flights and agent portal/.test(r.t), 'administrators still see the normal site');
 
     console.log('Maintenance OFF');
     r = await call('/api/admin/maintenance', { method: 'POST', body: JSON.stringify({ on: false }) }, ad.c); ok(r.s === 200 && r.j.maintenance.on === false, 'admin switches it off');
-    r = await call('/'); ok(r.s === 200 && /Everything your Umrah desk needs/.test(r.t), 'landing is back');
+    r = await call('/'); ok(r.s === 200 && /Umrah packages, flights and agent portal/.test(r.t), 'landing is back');
     r = await login('agent@x.pk', 'Passw0rd1'); ok(r.s === 200, 'agents can sign in again');
     r = await call('/api/state', {}, ag.c); ok(r.s === 200 && r.j.user && r.j.user.role === 'agent', 'the earlier agent session works again (nothing was lost)');
 

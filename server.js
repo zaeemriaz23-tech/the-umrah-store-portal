@@ -451,14 +451,14 @@ app.post('/api/wa/stop', auth, perm('integrations.manage'), async (req, res) => 
 const aiGate = (req, res, next) => (AI.aiAccess(req.u) ? next() : res.status(403).json({ error: 'The AI assistant is not enabled for your account.' }));
 app.post('/api/ai', auth, aiGate, async (req, res) => {
   if (!limit('ai:' + req.u.id, 30, 6e4)) return res.status(429).json({ error: 'Slow down a little - too many requests.' });
-  try { res.json(await AI.aiAsk(req.u, str(req.body.q, 800), req.body.history)); } catch (e) { res.status(e.status || 502).json({ error: e.message }); }
+  try { res.json(await AI.aiAsk(req.u,str(req.body.q,800),req.body.history,req.body.attachments)); } catch(e) { res.status(e.status||502).json({error:e.message}); }
 });
 app.post('/api/ai/run', auth, aiGate, (req, res) => {
   try { PM.audit(req.u, 'assistant.run', 'ai', { n: (req.body.actions || []).length }); const r = AI.aiRun(req.u, req.body.actions); save(); res.json({ results: r }); } catch (e) { res.status(e.status || 400).json({ error: e.message }); }
 });
-app.post('/api/ai/test', auth, perm('integrations.manage'), async (req, res) => {
-  try { const k = String(req.body.key || ''); res.json(await AI.groqTest(/^\*+$/.test(k) ? '' : k, req.body.provider || AI.groqCfg().provider || 'groq')); } catch (e) { res.status(400).json({ error: e.message }); }
-});
+const aiAdminOnly=(req,res,next)=>req.u&&req.u.role==='admin'?next():res.status(req.u?403:401).json({error:'Only an administrator can manage OpenRouter API keys'});
+app.post('/api/ai/test',auth,aiAdminOnly,async(req,res)=>{try{const k=String(req.body.key||'');res.json(await AI.testOpenRouter(/^\*+$/.test(k)?'':k));}catch(e){res.status(400).json({error:e.message});}});
+app.post('/api/ai/key/remove',auth,aiAdminOnly,(req,res)=>{try{const r=OPS.removeOpenRouterKey(req.u,str(req.body.id,80));save();res.json(r);}catch(e){res.status(e.status||400).json({error:e.message});}});
 
 /* ---------- bank accounts (public page + open API for the public list) ---------- */
 

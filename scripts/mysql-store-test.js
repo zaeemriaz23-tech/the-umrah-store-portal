@@ -64,7 +64,7 @@ try {
     const D=require(${JSON.stringify(path.join(root,'lib/db.js'))});
     (async()=>{
       await D.init();
-      if(memory.ddl.length!==3)throw new Error('schema DDL was not executed for crm_state, crm_state_backups and crm_files: '+memory.ddl.length);
+      if(memory.ddl.length!==4)throw new Error('expected 4 schema tables (crm_state, crm_state_backups, crm_files, crm_cloud_backup_runs), got '+memory.ddl.length);
       let h=await D.health(); if(h.driver!=='mysql'||!h.connected||!h.healthy)throw new Error('MySQL startup health is not healthy: '+JSON.stringify(h));
       if(!memory.state)throw new Error('initial local CRM state was not inserted to MySQL');
       let state=JSON.parse(memory.state.payload); if(!state.users.some(x=>x.id==='admin'))throw new Error('initial admin was not persisted');
