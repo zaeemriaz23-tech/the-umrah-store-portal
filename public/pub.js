@@ -25,37 +25,46 @@
     document.addEventListener('click', e => { const t = e.target.closest('[data-lead]'); if (t) openLead(t.dataset.lead, t.dataset.sum || '', t.dataset.ref || ''); });
   }
 
-  /* ---------- group filters ---------- */
+  /* ---------- public group filters: airline-only + compact advanced filters ---------- */
   const gl = $('#glist');
   if (gl && $('#gfilters')) {
     const GF = window.TUSGroupFilter;
-    const normFilter = v => GF ? GF.normalize(v) : String(v == null ? '' : v).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    const matchesFilter = (text, query) => GF ? GF.matchesText(text, query) : normFilter(text).includes(normFilter(query));
+    const matchesFilter = (text, query) => GF ? GF.matchesText(text, query) : String(text || '').toLowerCase().includes(String(query || '').toLowerCase());
+    const controls = ['fAir','fMon','fN','fFlight','fHotel','fFrom','fTo','fMin','fMax','fSeats'];
     const run = () => {
       const a = $('#fAir')?.value || '', m = $('#fMon')?.value || '', n = $('#fN')?.value || '';
-      const seats = !!$('#fSeats')?.checked, brand = $('#fBrand')?.value || '', flight = $('#fFlight')?.value || '', hotel = $('#fHotel')?.value || '';
+      const seats = !!$('#fSeats')?.checked, flight = $('#fFlight')?.value || '', hotel = $('#fHotel')?.value || '';
       const from = $('#fFrom')?.value || '', to = $('#fTo')?.value || '';
       const min = Number($('#fMin')?.value) || 0, max = Number($('#fMax')?.value) || 0;
       let shown = 0;
-      $('.gc', gl).forEach(c => {
-        const airlineText = c.dataset.airline || '', dep = c.dataset.dep || '', price = Number(c.dataset.price) || 0;
-        const ok = (!a || c.dataset.air === a || matchesFilter(airlineText, a)) &&
-          (!m || dep.startsWith(m)) && (!n || c.dataset.n === n) &&
+      $$('.gc', gl).forEach(card => {
+        const airline = card.dataset.airline || '', dep = card.dataset.dep || '', price = Number(card.dataset.price) || 0;
+        const ok = (!a || String(card.dataset.air || '').toUpperCase() === a.toUpperCase()) &&
+          (!m || dep.startsWith(m)) && (!n || card.dataset.n === n) &&
           (!from || dep >= from) && (!to || dep <= to) &&
-          (!seats || !c.querySelector('.st.out')) &&
-          (!brand || matchesFilter(c.dataset.brand || '', brand)) &&
-          (!flight || matchesFilter(c.dataset.flight || '', flight)) &&
-          (!hotel || matchesFilter(c.dataset.hotel || '', hotel)) &&
+          (!seats || !card.querySelector('.st.out')) &&
+          (!flight || matchesFilter(card.dataset.flight || '', flight)) &&
+          (!hotel || matchesFilter(card.dataset.hotel || '', hotel)) &&
           (!min || (price > 0 && price >= min)) && (!max || (price > 0 && price <= max));
-        c.hidden = !ok; if (ok) shown++;
+        card.hidden = !ok;
+        if (ok) shown++;
       });
-      const count = $('#gcount'); if (count) count.textContent = `Showing ${shown} of ${$('.gc', gl).length} group departures`;
+      const count = $('#gcount'); if (count) count.textContent = `Showing ${shown} of ${$$('.gc', gl).length} group departures`;
       const none = $('#gnone'); if (none) none.hidden = shown > 0;
     };
-    $('#gfilters select, #gfilters input').forEach(el => {
+    controls.forEach(id => {
+      const el = $('#' + id); if (!el) return;
       el.addEventListener('change', run);
-      if (el.type === 'search' || el.type === 'text' || el.type === 'number') el.addEventListener('input', run);
+      if (['search','text','number'].includes(el.type)) el.addEventListener('input', run);
     });
+    $('#fClear')?.addEventListener('click', () => {
+      controls.forEach(id => {
+        const el = $('#' + id); if (!el) return;
+        if (el.type === 'checkbox') el.checked = false; else el.value = '';
+      });
+      run();
+    });
+    run();
   }
 
   /* ---------- shared helpers for apps ---------- */
