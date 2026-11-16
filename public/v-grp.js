@@ -6,6 +6,7 @@ const seatCls = n => (n <= 0 ? 'out' : n < 10 ? 'low' : 'ok');
 // Search all stored supplier / brand metadata, not only the airline IATA code.
 // Old and newly synced group records can use different metadata field names.
 const GF = window.TUSGroupFilter || null;
+const gAirlineName = g => Engine.airName(g && g.air, g && (g.airline || g.air));
 const gNorm = v => GF ? GF.normalize(v) : String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function gBrandText(g) { return GF ? GF.brandText(g) : [g && g.supplierLabel, g && g.supplierRef, g && g.airline].filter(Boolean).join(' '); }
 const gFrom = g => { const v = g.pk.flatMap(k => Object.values(k.p)).filter(x => x > 0); return v.length ? Math.min(...v) : 0; };
@@ -25,7 +26,7 @@ function matchG(g, f) {
 }
 const legHtml = (t, l) => `<div class="leg"><div class="lt"><div class="ap">${esc(l.from)}</div><div class="t">${esc(l.dt)}</div></div><div class="ln"></div><div class="lt"><div class="ap">${esc(l.to)}</div><div class="t">${esc(l.at)}</div></div><div class="meta"><b>${t} ${esc(l.fn)}</b><br>${fdow(l.date)}, ${fdate(l.date)}${l.bag ? ' · ' + l.bag + ' kg baggage' : ''}</div></div>`;
 function groupText(g) {
-  return `*Umrah group ${g.airline}*\nDeparts ${fdow(g.dep)} ${fdate(g.dep)} · returns ${fdate(g.ret)} · ${g.n} nights\n${g.out.fn} ${g.out.from}-${g.out.to} ${g.out.dt}\n${g.inb.fn} ${g.inb.from}-${g.inb.to} ${g.inb.dt}\n\n` + g.pk.map(k => `${k.mk} (${k.mkn}N) + ${k.md} (${k.mdn}N)\n` + ROOMS.filter(r => k.p[r[0]]).map(r => `${r[1]}: PKR ${fnum(k.p[r[0]])}`).join(' · ')).join('\n\n') + `\n\nSeats left: ${g.seats}`;
+  return `*Umrah group ${gAirlineName(g)}*\nDeparts ${fdow(g.dep)} ${fdate(g.dep)} · returns ${fdate(g.ret)} · ${g.n} nights\n${g.out.fn} ${g.out.from}-${g.out.to} ${g.out.dt}\n${g.inb.fn} ${g.inb.from}-${g.inb.to} ${g.inb.dt}\n\n` + g.pk.map(k => `${k.mk} (${k.mkn}N) + ${k.md} (${k.mdn}N)\n` + ROOMS.filter(r => k.p[r[0]]).map(r => `${r[1]}: PKR ${fnum(k.p[r[0]])}`).join(' · ')).join('\n\n') + `\n\nSeats left: ${g.seats}`;
 }
 /* ---------- departure management (v4): KPI strip, three views, departure workspace (overview / pricing / bookings / passengers) ---------- */
 const gView = () => gf().view || 'cards';
@@ -50,7 +51,7 @@ function groupCard(g) {
   return `<article class="card gd-card" id="g-${esc(g.id)}">
   <div class="gd-date"><span>${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}</span><b>${p2(d.getUTCDate())}</b><span>${fdow(g.dep)}</span></div>
   <div class="gd-body">
-    <div class="gd-head"><div class="gd-air">${airBadge(g.air, g.airline, 44)}<div><b>${esc(g.airline || g.air)}</b><small>${esc(g.id)}${staff && g.code && g.code !== g.id ? ' · ' + esc(g.code) : ''}</small></div></div><div class="gd-badges">${gStatusBadges(g)}</div>
+    <div class="gd-head"><div class="gd-air">${airBadge(g.air, gAirlineName(g), 44)}<div><b>${esc(gAirlineName(g))}</b><small>${esc(g.id)}${staff && g.code && g.code !== g.id ? ' · ' + esc(g.code) : ''}</small></div></div><div class="gd-badges">${gStatusBadges(g)}</div>
       ${from ? `<div class="gd-from"><small>from</small><b>${fnum(from)}</b><small>PKR / person</small></div>` : ''}</div>
     <div class="gd-legs">${gLegLine('Out', g.out)}${gLegLine('Return', g.inb)}</div>
     <div class="gd-pk"><div class="gd-pkh"><span>Makkah</span><span>Madinah</span>${ROOMS.map(r => `<span class="c">${r[1]}</span>`).join('')}</div>
@@ -61,12 +62,12 @@ function groupCard(g) {
 function gTable(rows) {
   return `<div class="tw"><table class="t gd-table"><thead><tr><th>Departure</th><th>Group</th><th>Route</th><th>Hotels</th><th class="r">From (PKR)</th><th>Inventory</th><th></th></tr></thead><tbody>${rows.map(g => {
     const k = g.pk[0] || {}, from = gFrom(g);
-    return `<tr class="click" data-act="gDetail" data-a="${esc(g.id)}"><td><b>${fdate(g.dep)}</b><div class="sub">${fdow(g.dep)} · ${g.n} nights · back ${fdate(g.ret)}</div></td><td><div class="gd-air sm">${airBadge(g.air, g.airline, 30)}<div><b>${esc(g.airline || g.air)}</b><small>${esc(g.id)}</small></div></div></td><td>${esc(g.out.from)} → ${esc(g.out.to)}<div class="sub">${esc(g.out.fn)} · ${esc(g.inb.fn)}</div></td><td>${esc(k.mk || '-')}<div class="sub">${esc(k.md || '-')}${g.pk.length > 1 ? ' · +' + (g.pk.length - 1) + ' more package' + (g.pk.length > 2 ? 's' : '') : ''}</div></td><td class="r num"><b>${from ? fnum(from) : '-'}</b></td><td>${gMeter(g)}<div style="margin-top:6px">${gStatusBadges(g).split('</span>')[0]}</span></div></td><td class="r"><button class="btn sm" data-act="gDetail" data-a="${esc(g.id)}">Open</button></td></tr>`;
+    return `<tr class="click" data-act="gDetail" data-a="${esc(g.id)}"><td><b>${fdate(g.dep)}</b><div class="sub">${fdow(g.dep)} · ${g.n} nights · back ${fdate(g.ret)}</div></td><td><div class="gd-air sm">${airBadge(g.air, gAirlineName(g), 30)}<div><b>${esc(gAirlineName(g))}</b><small>${esc(g.id)}</small></div></div></td><td>${esc(g.out.from)} → ${esc(g.out.to)}<div class="sub">${esc(g.out.fn)} · ${esc(g.inb.fn)}</div></td><td>${esc(k.mk || '-')}<div class="sub">${esc(k.md || '-')}${g.pk.length > 1 ? ' · +' + (g.pk.length - 1) + ' more package' + (g.pk.length > 2 ? 's' : '') : ''}</div></td><td class="r num"><b>${from ? fnum(from) : '-'}</b></td><td>${gMeter(g)}<div style="margin-top:6px">${gStatusBadges(g).split('</span>')[0]}</span></div></td><td class="r"><button class="btn sm" data-act="gDetail" data-a="${esc(g.id)}">Open</button></td></tr>`;
   }).join('')}</tbody></table></div>`;
 }
 function gMonths(rows) {
   const by = {}; rows.forEach(g => (by[g.dep.slice(0, 7)] = by[g.dep.slice(0, 7)] || []).push(g));
-  return Object.keys(by).sort().map(m => { const list = by[m]; return `<section class="gd-month"><header><h3>${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}</h3><span>${list.length} departure${list.length === 1 ? '' : 's'} · ${sum(list, g => g.seats)} seats available</span></header><div class="card">${list.map(g => { const from = gFrom(g); return `<div class="gd-mrow click" data-act="gDetail" data-a="${esc(g.id)}"><div class="gd-md"><b>${p2(DT(g.dep).getUTCDate())}</b><small>${fdow(g.dep)}</small></div><div class="gd-air sm">${airBadge(g.air, g.airline, 30)}<div><b>${esc(g.airline || g.air)}</b><small>${esc(g.id)} · ${g.n} nights</small></div></div><div class="gd-mhot">${esc((g.pk[0] || {}).mk || '-')}<small>${esc((g.pk[0] || {}).md || '-')}</small></div><div class="gd-mfrom">${from ? '<small>from</small><b>' + fnum(from) + '</b>' : ''}</div>${gMeter(g)}<span class="bdg ${gStatus(g)[0]}">${gStatus(g)[1]}</span></div>`; }).join('')}</div></section>`; }).join('');
+  return Object.keys(by).sort().map(m => { const list = by[m]; return `<section class="gd-month"><header><h3>${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}</h3><span>${list.length} departure${list.length === 1 ? '' : 's'} · ${sum(list, g => g.seats)} seats available</span></header><div class="card">${list.map(g => { const from = gFrom(g); return `<div class="gd-mrow click" data-act="gDetail" data-a="${esc(g.id)}"><div class="gd-md"><b>${p2(DT(g.dep).getUTCDate())}</b><small>${fdow(g.dep)}</small></div><div class="gd-air sm">${airBadge(g.air, gAirlineName(g), 30)}<div><b>${esc(gAirlineName(g))}</b><small>${esc(g.id)} · ${g.n} nights</small></div></div><div class="gd-mhot">${esc((g.pk[0] || {}).mk || '-')}<small>${esc((g.pk[0] || {}).md || '-')}</small></div><div class="gd-mfrom">${from ? '<small>from</small><b>' + fnum(from) + '</b>' : ''}</div>${gMeter(g)}<span class="bdg ${gStatus(g)[0]}">${gStatus(g)[1]}</span></div>`; }).join('')}</div></section>`; }).join('');
 }
 const gRows = () => {
   const f = gf();
@@ -157,7 +158,7 @@ const gdBody = g => ({ overview: gdOverview, pricing: gdPricing, bookings: gdBoo
 const gdHtml = g => `<div class="gd-tabs"><div class="tabs">${gdTabs().map(t => `<button class="${GD.tab === t[0] ? 'on' : ''}" data-act="gdTab" data-a="${t[0]}">${ic(t[2], 'sm')}${t[1]}${t[0] === 'bookings' ? `<i>${heldBy(g).length}</i>` : ''}</button>`).join('')}</div></div><div id="gd-body" class="gd-pane">${gdBody(g)}</div>`;
 ACT.gDetail = id => {
   const g = (S.groups || []).find(x => x.id === id); if (!g) return; GD.id = id; GD.tab = 'overview';
-  openModal({ title: `${g.airline || g.air} · ${fdate(g.dep)} · ${g.id}`, wide: true, body: `<div id="gd-root">${gdHtml(g)}</div>`,
+  openModal({ title: `${gAirlineName(g)} · ${fdate(g.dep)} · ${g.id}`, wide: true, body: `<div id="gd-root">${gdHtml(g)}</div>`,
     foot: `<button class="btn ghost" data-act="closeModal">Close</button><span class="sp"></span>${isStaff() && can('groups.edit') ? `<button class="btn" data-act="gSeats" data-a="${esc(g.id)}">${ic('users', 'sm')}Update seats</button>` : ''}<button class="btn" data-act="gQuote" data-a="${esc(g.id)}">${ic('terminal', 'sm')}Quote</button><button class="btn pri" data-act="gdTab" data-a="pricing">${ic('briefcase', 'sm')}Book seats</button>` });
 };
 ACT.gdTab = a => { const g = (S.groups || []).find(x => x.id === GD.id); if (!g) return; GD.tab = a; const r = $('#gd-root'); if (r) r.innerHTML = gdHtml(g); };
@@ -197,8 +198,8 @@ ACT.gQuote = id => { UI.calc2 = UI.calc2 || null; UI.calcMode = 'group'; cc().gi
 ACT.gBook = a => {
   const [gid, pid, room] = a.split('|'), g = S.groups.find(x => x.id === gid), k = g.pk.find(x => x.id === pid), price = k.p[ROOMS.find(r => r[2] === room)[0]];
   const cost = isStaff() ? Math.round(price * (S.groupCostPct || 95) / 100) : '';
-  UI.prefill = { category: 'Group Package', groupRef: { gid, pid, room, seats: 0 }, services: [{ ...SVC_DEF('package'), type: 'package', title: `Umrah group ${g.airline} ${fdate(g.dep)} - ${room}`, qty: 1, autoQty: true, sell: price, cost, from: g.dep, to: g.ret,
-    d: { code: g.id, airline: g.airline, out: g.out, inb: g.inb, makkah: k.mk, madinah: k.md, mkn: k.mkn, mdn: k.mdn, mkd: k.mkd, mdd: k.mdd, room } }] };
+  UI.prefill = { category: 'Group Package', groupRef: { gid, pid, room, seats: 0 }, services: [{ ...SVC_DEF('package'), type: 'package', title: `Umrah group ${gAirlineName(g)} ${fdate(g.dep)} - ${room}`, qty: 1, autoQty: true, sell: price, cost, from: g.dep, to: g.ret,
+    d: { code: g.id, airline: gAirlineName(g), out: g.out, inb: g.inb, makkah: k.mk, madinah: k.md, mkn: k.mkn, mdn: k.mdn, mkd: k.mkd, mdd: k.mdd, room } }] };
   go('bookingform', 'new');
 };
 ACT.gSeats = id => openModal({ title: 'Seats remaining · ' + id, body: fld('Seats left', `<input id="gs-n" type="number" inputmode="numeric" min="0" max="999" value="${S.groups.find(g => g.id === id).seats}">`), foot: `<button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn pri" data-act="gSeatsSave" data-a="${esc(id)}">Save</button>` });
