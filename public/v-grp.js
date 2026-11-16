@@ -3,25 +3,20 @@
 const ROOMS = [['sh', 'Sharing', 'Sharing'], ['qd', 'Quad', 'Quad'], ['tr', 'Triple', 'Triple'], ['db', 'Double', 'Double']];
 const gf = () => UI.f.grp || (UI.f.grp = {});
 const seatCls = n => (n <= 0 ? 'out' : n < 10 ? 'low' : 'ok');
-// Search all stored supplier / brand metadata, not only the airline IATA code.
-// Old and newly synced group records can use different metadata field names.
 const GF = window.TUSGroupFilter || null;
-const gAirlineName = g => Engine.airName(g && g.air, g && (g.airline || g.air));
-const gNorm = v => GF ? GF.normalize(v) : String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-function gBrandText(g) { return GF ? GF.brandText(g) : [g && g.supplierLabel, g && g.supplierRef, g && g.airline].filter(Boolean).join(' '); }
+const gAirlineName = g => Engine.airName(g && g.air, g && g.air);
 const gFrom = g => { const v = g.pk.flatMap(k => Object.values(k.p)).filter(x => x > 0); return v.length ? Math.min(...v) : 0; };
 const kFrom = k => { const v = Object.values(k.p).filter(x => x > 0); return v.length ? Math.min(...v) : 0; };
 function matchG(g, f) {
   if (GF && GF.matches) return GF.matches(g, f);
   if (f.air && String(g.air || '').toUpperCase() !== String(f.air).toUpperCase()) return false;
-  if (f.brand && !gNorm(gBrandText(g)).includes(gNorm(f.brand))) return false;
   if (f.mon && !String(g.dep || '').startsWith(f.mon)) return false;
   if (f.from && g.dep < f.from) return false;
   if (f.to && g.dep > f.to) return false;
   if (f.n && g.n != f.n) return false;
   if (f.avail && g.seats <= 0) return false;
   if (f.max && gFrom(g) > +f.max) return false;
-  if (f.q && !gNorm([g.id, g.code, g.airline, g.air, g.out && g.out.fn, g.inb && g.inb.fn, g.supplierRef, gBrandText(g), ...(g.pk || []).flatMap(k => [k.mk, k.md, k.id])].join(' ')).includes(gNorm(f.q))) return false;
+  if (f.q && GF && !GF.matchesText(GF.searchText(g), f.q)) return false;
   return true;
 }
 const legHtml = (t, l) => `<div class="leg"><div class="lt"><div class="ap">${esc(l.from)}</div><div class="t">${esc(l.dt)}</div></div><div class="ln"></div><div class="lt"><div class="ap">${esc(l.to)}</div><div class="t">${esc(l.at)}</div></div><div class="meta"><b>${t} ${esc(l.fn)}</b><br>${fdow(l.date)}, ${fdate(l.date)}${l.bag ? ' · ' + l.bag + ' kg baggage' : ''}</div></div>`;
@@ -93,18 +88,14 @@ function gKpis(gs) {
 VIEWS.groups = {
   title: 'Group packages', roles: ['admin', 'staff', 'agent'],
   render() {
-    const f = gf(), gs = S.groups || [], airs = uniq(gs.map(g => g.air)).sort(), months = uniq(gs.map(g => g.dep.slice(0, 7))).sort(), brands = GF ? GF.brandOptions(gs) : [], v = gView();
+    const f = gf(), gs = S.groups || [], airs = uniq(gs.map(g => g.air)).sort(), months = uniq(gs.map(g => g.dep.slice(0, 7))).sort(), v = gView();
     const selectedAirs = Array.isArray(f.airs) ? f.airs : (f.air ? [f.air] : []);
-    const selectedBrands = Array.isArray(f.brands) ? f.brands : (f.brand ? [f.brand] : []);
-    const brandChips = selectedBrands.map(b => `<button type="button" class="g-filter-token" data-act="gBrandRemove" data-a="${esc(b)}" title="Remove ${esc(b)} filter">${esc(b)} <b aria-hidden="true">×</b></button>`).join('');
     return `<div class="ph"><div><h1>Group packages</h1><p>Departure management · live seats, pricing and bookings. Departed groups are removed automatically.</p></div><div class="sp">${isStaff() && can('groups.create') ? `<button class="btn pri" data-act="gAdd">${ic('plus')}Add departure</button><button class="btn" data-act="gImport">${ic('upload')}Import PDF</button>` : ''}${isStaff() && (isAdmin() || can('assistant.groups')) ? `<a class="btn" href="#/assistant">${ic('spark')}Ask AI</a>` : ''}<a class="btn" href="#/calculator">${ic('terminal')}Calculator</a></div></div>
     ${gs.length ? gKpis(gs) : ''}
     <div class="gd-bar"><div class="tabs" role="tablist" aria-label="View">${[['cards', 'grid', 'Departures'], ['table', 'list', 'Table'], ['month', 'calendar', 'By month']].map(x => `<button role="tab" aria-selected="${v === x[0]}" class="${v === x[0] ? 'on' : ''}" data-act="gView" data-a="${x[0]}">${ic(x[1], 'sm')}${x[2]}</button>`).join('')}</div>
-    ${airs.length ? `<div class="chips gd-air-filters" role="group" aria-label="Filter by airline (select multiple)"><button class="chip ${!selectedAirs.length ? 'on' : ''}" data-act="gAir" data-a="">All airlines</button>` + airs.map(a => `<button class="chip ${selectedAirs.some(x => String(x).toUpperCase() === String(a).toUpperCase()) ? 'on' : ''}" data-act="gAir" data-a="${esc(a)}">${airBadge(a, (gs.find(g => g.air === a) || {}).airline, 20)}${esc(Engine.airName(a, (gs.find(g => g.air === a) || {}).airline))}<i>${gs.filter(g => g.air === a).length}</i></button>`).join('') + `</div>` : ''}</div>
+    ${airs.length ? `<div class="chips gd-air-filters" role="group" aria-label="Filter by airline (select multiple)"><button class="chip ${!selectedAirs.length ? 'on' : ''}" data-act="gAir" data-a="">All airlines</button>` + airs.map(a => `<button class="chip ${selectedAirs.some(x => String(x).toUpperCase() === String(a).toUpperCase()) ? 'on' : ''}" data-act="gAir" data-a="${esc(a)}">${airBadge(a, (gs.find(g => g.air === a) || {}).airline, 20)}${esc(Engine.airName(a, a))}<i>${gs.filter(g => g.air === a).length}</i></button>`).join('') + `</div>` : ''}</div>
     <div class="fb gd-filter-panel">
       <div class="fld grow"><span>Search all group details</span><input value="${esc(f.q || '')}" placeholder="Group code, airline, flight, hotel, airport" data-inp="gQ"></div>
-      ${isStaff() ? `<div class="gdf-brand"><label class="fld"><span>Add brand / supplier filters (multiple)</span><input id="gBrandInput" type="search" list="gBrandOptions" placeholder="Type AirSial, Meezab e Qaba, MZB…" data-enter="gBrandAdd" autocomplete="off"><datalist id="gBrandOptions">${brands.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist></label><button type="button" class="btn sm pri gdf-add" data-act="gBrandAdd">${ic('plus', 'sm')}Add filter</button></div>` : ''}
-      ${brandChips ? `<div class="gdf-tokens" aria-label="Active brand filters">${brandChips}<span class="hint">Any selected brand may match</span></div>` : ''}
       <details class="gdf-more" ${['flight','hotel','mkHotel','mdHotel','from','to','mon','n','minPrice','maxPrice','avail'].some(k => f[k]) ? 'open' : ''}><summary>${ic('filter', 'sm')} More filters <span class="hint">Dates · Flights · Hotels · Nights · Price · Seats</span></summary>
         <div class="gdf-grid">
           <label class="fld"><span>Flight number / route</span><input value="${esc(f.flight || '')}" placeholder="PF 718, SV 739, ISB JED" data-inp="gFlight"></label>
@@ -177,15 +168,6 @@ INP.gFlight = debounce(v => { gf().flight = v; refreshGroupList(); }, 110);
 INP.gHotel = debounce(v => { gf().hotel = v; refreshGroupList(); }, 110);
 INP.gMkHotel = debounce(v => { gf().mkHotel = v; refreshGroupList(); }, 110);
 INP.gMdHotel = debounce(v => { gf().mdHotel = v; refreshGroupList(); }, 110);
-ACT.gBrandAdd = (value, target) => {
-  const input = $('#gBrandInput'), raw = String(value || (input && input.value) || '').trim();
-  const additions = raw.split(/[,;|\n\r]+/).map(x => x.trim()).filter(Boolean);
-  if (!additions.length) { toast('Enter a brand or supplier name first', true); return; }
-  const f = gf(), list = Array.isArray(f.brands) ? f.brands.slice() : (f.brand ? [f.brand] : []), seen = new Set(list.map(x => GF ? GF.normalize(x) : String(x).toLowerCase()));
-  additions.forEach(x => { const key = GF ? GF.normalize(x) : x.toLowerCase(); if (key && !seen.has(key)) { list.push(x); seen.add(key); } });
-  f.brands = list; delete f.brand; renderView();
-};
-ACT.gBrandRemove = value => { const f = gf(); f.brands = (Array.isArray(f.brands) ? f.brands : []).filter(x => x !== value); if (!f.brands.length) delete f.brands; renderView(); };
 ACT.gAir = value => {
   const f = gf(), selected = Array.isArray(f.airs) ? f.airs.slice() : (f.air ? [f.air] : []);
   if (!value) { delete f.airs; delete f.air; }
