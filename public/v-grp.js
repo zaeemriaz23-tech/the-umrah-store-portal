@@ -71,7 +71,7 @@ const gRows = () => {
 const gList = () => {
   const rows = gRows(), v = gView(), total = (S.groups || []).length;
   const summary = `<p class="hint" role="status" aria-live="polite" style="margin:0 0 12px">Showing <b>${rows.length}</b> of <b>${total}</b> group departures</p>`;
-  if (!rows.length) return summary + `<div class="card">${total ? empty('search', 'No departures match your filters', 'Try another airline, supplier, hotel, date, flight number or price. Search accepts several terms and comma-separated alternatives.', '<button class="btn" data-act="gClear">Clear filters</button>') : empty('layers', 'No group departures published', isStaff() ? 'Import the latest supplier "Umrah Groups" PDF or add a departure manually.' : 'The office has not published any departures yet.', isStaff() ? `<button class="btn pri" data-act="gImport">${ic('upload', 'sm')}Import groups PDF</button>` : '')}</div>`;
+  if (!rows.length) return summary + `<div class="card">${total ? empty('search', 'No departures match your filters', 'Try another airline, hotel, date, flight number or price. Search accepts several terms and comma-separated alternatives.', '<button class="btn" data-act="gClear">Clear filters</button>') : empty('layers', 'No group departures published', isStaff() ? 'Import the latest supplier "Umrah Groups" PDF or add a departure manually.' : 'The office has not published any departures yet.', isStaff() ? `<button class="btn pri" data-act="gImport">${ic('upload', 'sm')}Import groups PDF</button>` : '')}</div>`;
   return summary + (v === 'table' ? gTable(rows) : v === 'month' ? gMonths(rows) : `<div class="gd-list">${rows.map(groupCard).join('')}</div>`);
 };
 function gKpis(gs) {
@@ -88,7 +88,8 @@ function gKpis(gs) {
 VIEWS.groups = {
   title: 'Group packages', roles: ['admin', 'staff', 'agent'],
   render() {
-    const f = gf(), gs = S.groups || [], airs = uniq(gs.map(g => g.air)).sort(), months = uniq(gs.map(g => g.dep.slice(0, 7))).sort(), v = gView();
+    const f = gf(); delete f.brand; delete f.brands; // discard obsolete persisted supplier filters from earlier versions
+    const gs = S.groups || [], airs = uniq(gs.map(g => g.air)).sort(), months = uniq(gs.map(g => g.dep.slice(0, 7))).sort(), v = gView();
     const selectedAirs = Array.isArray(f.airs) ? f.airs : (f.air ? [f.air] : []);
     return `<div class="ph"><div><h1>Group packages</h1><p>Departure management · live seats, pricing and bookings. Departed groups are removed automatically.</p></div><div class="sp">${isStaff() && can('groups.create') ? `<button class="btn pri" data-act="gAdd">${ic('plus')}Add departure</button><button class="btn" data-act="gImport">${ic('upload')}Import PDF</button>` : ''}${isStaff() && (isAdmin() || can('assistant.groups')) ? `<a class="btn" href="#/assistant">${ic('spark')}Ask AI</a>` : ''}<a class="btn" href="#/calculator">${ic('terminal')}Calculator</a></div></div>
     ${gs.length ? gKpis(gs) : ''}
