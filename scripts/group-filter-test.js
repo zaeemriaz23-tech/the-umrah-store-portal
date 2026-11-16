@@ -1,5 +1,6 @@
 'use strict';
 const assert = require('assert');
+const fs = require('fs');
 const F = require('../public/group-filter');
 const group = {
   id: 'UG-100616', code: 'MZB-616', air: 'PF', airline: 'PF-AirSial Meezab e Kaba',
@@ -15,6 +16,17 @@ assert(F.matches(group, { airs: ['SV', 'PF'] }), 'multiple airline selections ac
 assert(!F.matches(group, { airs: ['SV', 'QR'] }), 'unselected airlines are excluded');
 assert(F.airlineOptions([group]).includes('PF'), 'airline options use airline code PF');
 assert.strictEqual(F.AIRLINES.PF, 'AirSial', 'PF airline code is labelled AirSial');
+const publicPage = fs.readFileSync(require.resolve('../lib/seo.js'), 'utf8');
+const publicScript = fs.readFileSync(require.resolve('../public/pub.js'), 'utf8');
+const staffPage = fs.readFileSync(require.resolve('../public/v-grp.js'), 'utf8');
+const publicCss = fs.readFileSync(require.resolve('../public/pub.css'), 'utf8');
+assert(!publicPage.includes('id="fBrand"') && !publicPage.includes('Brand / supplier'), 'public group page has no brand/supplier filter');
+assert(!publicPage.includes('data-brand=') && !publicPage.includes('brandChoices'), 'public group cards expose no supplier filter metadata');
+assert(!publicScript.includes('fBrand') && !publicScript.includes('data-brand'), 'public filter script does not query supplier metadata');
+assert(!staffPage.includes('gBrandInput') && !staffPage.includes('Add brand / supplier'), 'staff group page has no brand/supplier filter');
+assert(publicPage.includes('group-filter-wrap') && publicPage.includes('group-filter-more'), 'public group filters use compact collapsed advanced layout');
+assert(publicCss.includes('.group-filter-wrap') && publicCss.includes('.group-filter-grid'), 'compact group filter controls are styled');
+
 assert(!F.matches(group, { air: 'Meezab' }), 'supplier name cannot match airline facet');
 assert(!F.matches(group, { air: 'MZB' }), 'supplier code cannot match airline facet');
 assert(F.matches(group, { q: 'PF 718 Arfat Zahbi' }), 'general search matches route and hotel');
@@ -37,4 +49,4 @@ assert(!F.matches(group, { from: '2026-11-20' }), 'date lower bound excludes ear
 assert(F.matches(group, { minPrice: 262000, maxPrice: 262000 }), 'price boundaries are inclusive');
 assert(!F.matches(group, { minPrice: 262001 }), 'minimum price excludes lower result');
 assert(!F.matches(group, { maxPrice: 261999 }), 'maximum price excludes higher result');
-console.log('Group airline/filter regression tests passed (29 assertions).');
+console.log('Group airline/filter regression tests passed (35 assertions).');
